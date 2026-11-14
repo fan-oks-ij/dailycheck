@@ -1,0 +1,1463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0ca30c">
+<title>📅 每日打卡</title>
+<style>
+/* ── 配色沿用体检打卡已过对比度校验的色板，状态色永远 图标+文字 双编码 ── */
+:root {
+  color-scheme: light;
+  --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --border:rgba(11,11,11,.10);
+  --good:#0ca30c; --good-text:#006300; --bad:#d03b3b; --accent:#2a78d6; --accent-weak:#cde2fb;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --border:rgba(255,255,255,.10);
+  --good:#0ca30c; --good-text:#0ca30c; --bad:#d03b3b; --accent:#3987e5; --accent-weak:#0d366b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --border:rgba(255,255,255,.10);
+    --good:#0ca30c; --good-text:#0ca30c; --bad:#d03b3b; --accent:#3987e5; --accent-weak:#0d366b;
+  }
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--page); color:var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+.wrap { max-width: 680px; margin: 0 auto; padding: 14px 14px 56px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:14px 14px; margin-top:12px; }
+h1 { font-size:20px; margin:0; display:flex; align-items:center; gap:8px; }
+h2 { font-size:15px; margin:0 0 10px; color:var(--ink2); font-weight:600; }
+.sub { color:var(--muted); font-size:12px; }
+.btn { background:none; border:1px solid var(--border); border-radius:8px; color:var(--ink2);
+  padding:6px 12px; font-size:13px; cursor:pointer; font-family:inherit; }
+.btn:hover { background:var(--grid); }
+.btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+.btnrow { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+.hidden { display:none !important; }
+/* 顶部三大区切换 */
+.tabbar { display:flex; gap:6px; margin-top:12px; }
+.tabbar button { flex:1; border:1px solid var(--border); border-radius:10px; padding:9px 4px;
+  font-size:14px; cursor:pointer; color:var(--ink2); background:var(--surface); font-family:inherit; }
+.tabbar button.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+/* 对话式入职：聊天气泡 */
+#chatBox { display:flex; flex-direction:column; gap:10px; margin-top:12px; }
+.bub { max-width:88%; padding:10px 13px; border-radius:14px; font-size:14px; line-height:1.65; }
+.bub.ai { align-self:flex-start; background:var(--surface); border:1px solid var(--border);
+  border-bottom-left-radius:4px; }
+.bub.ai b { color:var(--ink); }
+.bub.me { align-self:flex-end; background:var(--accent); color:#fff;
+  border-bottom-right-radius:4px; }
+.bub.me .subt { color:rgba(255,255,255,.8); font-size:12px; }
+.chips { display:flex; gap:6px; flex-wrap:wrap; }
+.chips button { border:1px solid var(--accent); background:var(--accent-weak); color:var(--ink);
+  border-radius:999px; padding:6px 13px; font-size:13px; cursor:pointer; font-family:inherit; }
+.chips button:hover { background:var(--accent); color:#fff; }
+.chatrow { display:flex; gap:8px; margin-top:6px; }
+.chatrow input { flex:1; border:1px solid var(--grid); border-radius:10px; padding:10px;
+  font:inherit; font-size:14px; background:var(--surface); color:var(--ink); }
+/* 打卡行（沿用体检打卡交互） */
+.row { display:flex; align-items:center; gap:10px; padding:11px 4px; border-bottom:1px solid var(--grid);
+  cursor:pointer; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+.row:last-child { border-bottom:none; }
+.row .ico { font-size:20px; width:26px; text-align:center; flex:none; }
+.row .tt { flex:1; min-width:0; }
+.row .tt b { font-size:14px; font-weight:600; display:block; }
+.row .tt .sub { display:block; }
+.noteline { display:block; font-size:12px; color:var(--ink2); margin-top:2px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.st { flex:none; font-size:13px; padding:4px 10px; border-radius:999px; border:1.5px solid var(--grid);
+  color:var(--muted); min-width:74px; text-align:center; }
+.st.done { background:var(--good); border-color:var(--good); color:#fff; font-weight:700; }
+.st.miss { border:1.5px dashed var(--bad); color:var(--bad); font-weight:700; background:none; }
+.nb { flex:none; border:1px solid var(--border); background:none; border-radius:6px;
+  width:28px; height:28px; font-size:14px; color:var(--muted); cursor:pointer; }
+.nb.has { color:var(--accent); border-color:var(--accent); }
+.ctabrow { display:flex; gap:6px; margin-top:10px; }
+.ctab { flex:1; border:1px solid var(--border); border-radius:10px; padding:6px 4px;
+  font-size:13px; cursor:pointer; color:var(--ink2); background:var(--surface);
+  font-family:inherit; line-height:1.35; text-align:center; }
+.ctab small { display:block; font-size:11px; color:var(--muted); }
+.ctab.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+.ctab.on small { color:rgba(255,255,255,.85); }
+.chip { border:1px solid var(--border); border-radius:999px; padding:5px 13px; font-size:13px;
+  cursor:pointer; color:var(--ink2); background:var(--surface); font-family:inherit; }
+.chip.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+#shiftChips { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.fixlink { cursor:pointer; text-decoration:underline; }
+.banner { background:var(--accent-weak); border:1px solid var(--accent); border-radius:10px;
+  padding:10px 12px; margin-top:12px; font-size:13.5px; display:flex; align-items:center; gap:10px;
+  justify-content:space-between; flex-wrap:wrap; }
+/* 体检：标签 + 录入格 */
+.tag { display:inline-block; border-radius:999px; padding:2px 9px; font-size:12px;
+  border:1px solid var(--grid); color:var(--ink2); font-variant-numeric:tabular-nums; }
+.tag.hi { color:var(--bad); border-color:var(--bad); font-weight:700; }
+.tag.lo { color:#b8860b; border-color:#b8860b; font-weight:700; }
+.tag.ok { color:var(--good-text); border-color:var(--good); }
+.tag.mid { color:var(--accent); border-color:var(--accent); }
+.ckgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.ckfld { border:1px solid var(--border); border-radius:10px; padding:8px 10px; background:var(--page); }
+.ckfld label { font-size:12px; color:var(--ink2); display:block; }
+.ckfld input { width:100%; border:none; border-bottom:1px solid var(--grid); background:none;
+  padding:4px 0; font:inherit; font-size:15px; color:var(--ink); }
+.ckfld .rng { font-size:11px; color:var(--muted); }
+.anbox { border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-top:8px;
+  font-size:13.5px; line-height:1.7; background:var(--page); }
+.anbox h4 { margin:8px 0 4px; font-size:13px; color:var(--ink2); }
+.anbox ul { margin:4px 0; padding-left:18px; }
+.tile { border:1px solid var(--border); border-radius:10px; padding:10px; }
+.tiles { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+.tile .nm { font-size:12px; color:var(--ink2); font-weight:600; }
+.tile .val { font-size:24px; font-weight:700; margin:2px 0 4px; font-variant-numeric:tabular-nums; }
+.tile .val small { font-size:13px; color:var(--muted); font-weight:400; }
+/* 近7天条 / 提醒 / 历史（沿用） */
+.strip { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+.day { border:1px solid var(--border); border-radius:8px; padding:7px 2px 6px; text-align:center;
+  cursor:pointer; background:var(--surface); }
+.day.sel { outline:2px solid var(--accent); outline-offset:1px; }
+.day .wd { font-size:11px; color:var(--muted); }
+.day .dd { font-size:13px; font-weight:700; }
+.day .sf { font-size:15px; margin-top:1px; }
+.day .rs { font-size:15px; margin-top:2px; }
+.day .rs small { display:block; font-size:10px; color:var(--ink2); }
+.rem { display:flex; justify-content:space-between; align-items:baseline; padding:7px 2px;
+  border-bottom:1px solid var(--grid); font-size:13px; gap:8px; }
+.rem:last-child { border-bottom:none; }
+.rem .cnt { flex:none; font-weight:700; }
+.rem.hot .cnt { color:var(--bad); }
+.rem.ok .cnt { color:var(--good-text); }
+details.hist { border-bottom:1px solid var(--grid); }
+details.hist:last-child { border-bottom:none; }
+details.hist summary { cursor:pointer; padding:8px 2px; font-size:13.5px; list-style:none;
+  display:flex; justify-content:space-between; gap:8px; align-items:center; }
+details.hist summary::-webkit-details-marker { display:none; }
+details.hist summary:hover { background:var(--grid); border-radius:6px; }
+.revline { display:flex; align-items:center; gap:8px; padding:5px 0; font-size:13.5px; }
+.revline .g { flex:none; width:18px; text-align:center; font-weight:700; }
+.revline.ok .g { color:var(--good-text); }
+.revline.no .g { color:var(--bad); }
+.revline.na .g { color:var(--muted); }
+.revline .mid { flex:1; min-width:0; }
+.hero { font-size:40px; font-weight:700; line-height:1.1; }
+.foot { margin-top:18px; font-size:12px; color:var(--muted); line-height:1.7; }
+.fld{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.fld input{flex:1;min-width:130px;border:1px solid var(--grid);border-radius:8px;padding:8px;
+  font:inherit;font-size:13px;background:var(--page);color:var(--ink)}
+/* 弹窗 & 提示条 */
+#overlay, #wkOverlay { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex;
+  align-items:center; justify-content:center; z-index:50; padding:20px; }
+#wkOverlay { z-index:55; padding:16px; }
+.mcard { background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:16px; width:100%; max-width:420px; }
+#wkOverlay .mcard { max-width:520px; max-height:86vh; overflow:auto; }
+.mcard h3 { margin:0 0 4px; font-size:15px; }
+.mcard textarea { width:100%; height:110px; border:1px solid var(--grid); border-radius:8px;
+  padding:8px; font:inherit; font-size:14px; background:var(--page); color:var(--ink);
+  resize:vertical; margin-top:8px; }
+.mrow { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+.mrow .del { margin-right:auto; color:var(--bad); }
+.toast { position:fixed; left:50%; bottom:34px; transform:translateX(-50%);
+  background:var(--ink); color:var(--page); padding:9px 18px; border-radius:999px;
+  font-size:13px; opacity:0; pointer-events:none; transition:opacity .25s; z-index:60;
+  max-width:80vw; }
+.toast.show { opacity:.95; }
+.wk-hero { display:flex; align-items:baseline; gap:10px; margin:4px 0 2px; }
+.wk-sec { margin-top:12px; }
+.wk-sec h4 { margin:0 0 6px; font-size:13.5px; color:var(--ink2); }
+.wk-list { margin:0; padding-left:20px; font-size:13.5px; line-height:1.7; }
+.wk-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.wk-chips span { border:1px solid var(--border); border-radius:999px; padding:4px 10px;
+  font-size:12.5px; line-height:1.5; }
+.wk-chips span.ok { color:var(--good-text); border-color:var(--good); }
+.wk-chips span.no { color:var(--bad); border-color:var(--bad); }
+.wk-sub { font-size:12.5px; color:var(--muted); }
+#reportBox { font-size:13.5px; line-height:1.7; }
+#reportBox table { width:100%; border-collapse:collapse; margin:8px 0; font-size:12.5px; }
+#reportBox th, #reportBox td { border:1px solid var(--grid); padding:5px 8px; text-align:left; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h1>📅 每日打卡</h1>
+    <button class="btn" id="themeBtn" title="切换主题">🌗 自动</button>
+  </div>
+  <div class="sub" id="dateLine"></div>
+  <div class="sub" id="syncStat" style="margin-top:2px"></div>
+
+  <!-- ① 对话式入职引导（首启/可重进） -->
+  <div id="onboardView">
+    <div id="chatBox"></div>
+    <div class="chatrow hidden" id="chatRow">
+      <input id="chatInput" placeholder="用一两句话描述你的工作和作息…">
+      <button class="btn primary" onclick="chatSend()">发送</button>
+    </div>
+  </div>
+
+  <!-- ② 主应用：三区切换 -->
+  <div id="appView" class="hidden">
+    <div class="tabbar" id="tabbar">
+      <button class="on" data-t="ck" onclick="switchTab('ck')">✅ 打卡</button>
+      <button data-t="cu" onclick="switchTab('cu')">🧪 体检</button>
+      <button data-t="me" onclick="switchTab('me')">⚙️ 我的</button>
+    </div>
+
+    <div id="tab-ck">
+      <div class="ctabrow hidden" id="cycleTabs"></div>
+      <div id="shiftChips" class="hidden"></div>
+      <div id="editBanner" class="banner hidden"></div>
+      <div class="card hidden" id="reviewCard">
+        <h2>🌙 昨日回顾 <span class="sub" id="reviewMeta"></span></h2>
+        <div id="reviewBody"></div>
+        <div class="btnrow"><button class="btn" onclick="dismissReview()">知道了，看今天</button></div>
+      </div>
+      <div class="card">
+        <h2>今日清单 · <span id="listDate"></span> <span class="sub" id="daySummary"></span></h2>
+        <div id="checklist"></div>
+        <div class="sub" style="margin-top:8px">点一下切换：未记录 → ✓ 做了 → ✗ 没做 · 长按（电脑右键）记备注</div>
+      </div>
+      <div class="card">
+        <h2>近 7 天 <span class="sub">点某天可以补打卡</span></h2>
+        <div class="strip" id="strip"></div>
+      </div>
+      <div class="card">
+        <h2>⏰ 提醒 <span class="sub" id="remMeta"></span></h2>
+        <div id="reminders"></div>
+        <div class="btnrow"><button class="btn" onclick="openAddRem()">＋ 加提醒</button></div>
+      </div>
+    </div>
+
+    <div id="tab-cu" class="hidden">
+      <div class="card">
+        <h2>🧪 体检指标录入 <span class="sub">填数值即可，粘贴报告也行</span></h2>
+        <div class="sub">参考区间按常见成人标准，性别不同自动区分；以你报告上的参考范围为准。</div>
+        <div class="ckgrid" id="ckGrid" style="margin-top:8px"></div>
+        <div class="btnrow">
+          <button class="btn primary" onclick="runCheckup()">生成联合分析</button>
+          <button class="btn" onclick="pasteReport()">粘贴整份报告</button>
+          <button class="btn" onclick="clearCheckup()">清空</button>
+        </div>
+      </div>
+      <div class="card hidden" id="ckResultCard">
+        <h2>📋 体检 × 作息 联合分析 <span class="sub" id="ckMeta"></span></h2>
+        <div id="ckResult"></div>
+        <div class="btnrow">
+          <button class="btn" onclick="copyCheckup()">复制给 Claude</button>
+          <button class="btn primary" onclick="applyCheckupItems()">一键转成打卡项+复查提醒</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-me" class="hidden">
+      <div class="card">
+        <h2>👤 我的作息档案</h2>
+        <div id="profileCard"></div>
+        <div class="btnrow">
+          <button class="btn" onclick="restartOnboard()">重新入职（改作息）</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>✏️ 自定义打卡项</h2>
+        <div id="customList"></div>
+        <div class="fld">
+          <input id="cusIco" placeholder="图标（可选，如 💊）" style="flex:0 0 110px">
+          <input id="cusName" placeholder="名称，如：晚饭后散步">
+          <input id="cusNote" placeholder="说明（可选）">
+        </div>
+        <div class="btnrow"><button class="btn primary" onclick="addCustom()">添加</button></div>
+      </div>
+      <div class="card" id="cloudCard" hidden>
+        <h2>☁️ 云同步（Gitee 私有仓库）</h2>
+        <div class="sub" id="cloudStat"></div>
+        <div class="fld"><input id="cOwner" placeholder="Gitee 用户名"><input id="cRepo" placeholder="私有仓库名（如 dailycheck-data）"></div>
+        <div class="fld"><input id="cPath" placeholder="数据文件名（默认：每日打卡数据.json）"><input id="cBranch" placeholder="分支（默认 master）"></div>
+        <div class="fld"><input id="cToken" type="password" placeholder="私人令牌（只存在本机，不会上传）"></div>
+        <div class="btnrow">
+          <button class="btn primary" onclick="saveCloudCfgStart()">测试并启用</button>
+          <button class="btn" onclick="stopCloudCfg()">停用云端</button>
+        </div>
+        <div class="sub" style="margin-top:6px">令牌只保存在本机浏览器；数据存你自己的 Gitee 私有仓库。手机电脑各填一次即可互相同步。</div>
+      </div>
+      <div class="card">
+        <h2>数据备份</h2>
+        <div class="btnrow">
+          <button class="btn" onclick="exportData()">导出备份</button>
+          <button class="btn" onclick="document.getElementById('impFile').click()">导入备份</button>
+          <input type="file" id="impFile" accept=".json" class="hidden" onchange="importData(event)">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">
+    每日打卡 · 通用作息打卡 App（对话式入职 + 体检×作息联合分析）<br>
+    体检建议仅为行为层提示，不构成诊疗意见，请以医院医生意见为准。
+  </div>
+</div>
+
+<!-- 备注弹窗 -->
+<div id="overlay" class="hidden" onclick="if(event.target===this)closeNote()">
+  <div class="mcard">
+    <h3 id="noteTitle">📝 备注</h3>
+    <div class="sub" id="noteSub"></div>
+    <textarea id="noteText" placeholder="例：只喝了 200ml；忘了，睡前补了；加班到 22 点…"></textarea>
+    <div class="mrow">
+      <button class="btn del" onclick="clearNote()">删除备注</button>
+      <button class="btn" onclick="closeNote()">取消</button>
+      <button class="btn primary" onclick="saveNote()">保存</button>
+    </div>
+  </div>
+</div>
+<!-- 加提醒弹窗 -->
+<div id="remOverlay" class="hidden" onclick="if(event.target===this)closeAddRem()">
+  <div class="mcard">
+    <h3>⏰ 新提醒</h3>
+    <div class="fld" style="flex-direction:column">
+      <input id="remName" placeholder="名称，如：尿酸复查">
+      <input id="remDue" type="date" title="日期">
+      <input id="remNote" placeholder="说明（可选）">
+    </div>
+    <div class="mrow">
+      <button class="btn" onclick="closeAddRem()">取消</button>
+      <button class="btn primary" onclick="saveAddRem()">保存</button>
+    </div>
+  </div>
+</div>
+<!-- 周报弹窗（每周自动弹一次） -->
+<div id="wkOverlay" class="hidden" onclick="if(event.target===this)closeWeekly()">
+  <div class="mcard">
+    <div id="wkBody"></div>
+    <div class="mrow">
+      <button class="btn" onclick="copyWeekly()">复制周报</button>
+      <button class="btn primary" onclick="closeWeekly()">开始今天打卡</button>
+    </div>
+  </div>
+</div>
+<!-- 粘贴报告弹窗 -->
+<div id="pasteOverlay" class="hidden" onclick="if(event.target===this)closePaste()">
+  <div class="mcard">
+    <h3>🧪 粘贴体检报告</h3>
+    <div class="sub">直接把报告文字全选复制进来，我自动认出有参考区间的数值。</div>
+    <textarea id="pasteText" placeholder="例：尿酸 512 umol/L 参考 208-428&#10;空腹血糖 6.8 mmol/L …"></textarea>
+    <div class="mrow">
+      <button class="btn" onclick="closePaste()">取消</button>
+      <button class="btn primary" onclick="doParsePaste()">识别并填入</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+'use strict';
+/* ============ 基础工具 ============ */
+const LS='dailycheck.v1', LS_THEME=LS+'.theme', CKEY='dailycheck.cloud';
+const pad=n=>String(n).padStart(2,'0');
+const fmt=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const todayStr=()=>fmt(new Date());
+function addDays(s,n){const[y,m,d]=s.split('-').map(Number);return fmt(new Date(y,m-1,d+n));}
+function parseD(s){const[y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d);}
+function diffDays(a,b){return Math.round((parseD(b)-parseD(a))/864e5);}
+function wdCN(s){return '日一二三四五六'[parseD(s).getDay()];}
+function mondayOf(s){return addDays(s,-((parseD(s).getDay()+6)%7));}
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg;
+  t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'),2400); }
+function dl(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),3000); }
+function nowHM(){ return new Date().toTimeString().slice(0,5); }
+
+/* ============ 数据仓库 ============ */
+let store; try{ store=JSON.parse(localStorage.getItem(LS))||null; }catch(e){ store=null; }
+function freshStore(){ return { days:{}, weeks:{}, reminders:[], customItems:[],
+  checkup:{vals:{},text:''}, profile:null, onboarded:false,
+  reports:[], lastSummary:null, weeklySeen:null, reviewSeen:null }; }
+if(!store||!store.days) store=freshStore();
+['weeks','reminders','customItems','reports'].forEach(k=>{ if(!store[k])store[k]=[]; });
+if(!store.customItems)store.customItems=[];
+if(!store.checkup)store.checkup={vals:{},text:''};
+if(store.reminders&&store.reminders.length&&typeof store.reminders[0]==='string')store.reminders=[];
+let sel=todayStr(), theme=localStorage.getItem(LS_THEME)||'auto';
+let fixMode=false, weeklyMd='', ckPlan=null;
+
+function save(){ store._ts=Date.now();
+  try{ localStorage.setItem(LS,JSON.stringify(store)); }catch(e){}
+  pushSoon(); }
+function rec(s){ return store.days[s]||(store.days[s]={items:{},notes:{}}); }
+function noteOf(s,id){ const dd=store.days[s]; return (dd&&dd.notes&&dd.notes[id])||''; }
+
+/* ============ 云同步 v4.3：Gitee 私有仓库（BYO）/ 纯本机，自动切换 ============ */
+function cloudCfg(){ try{ return JSON.parse(localStorage.getItem(CKEY))||null; }catch(e){ return null; } }
+function saveCloudCfg(c){ if(c)localStorage.setItem(CKEY,JSON.stringify(c)); else localStorage.removeItem(CKEY); }
+let netOK=true, pushTimer=null, giteeSha=null, lastSyncAt='', lastPoll=0, rateLimitedUntil=0, lastErr='';
+const b64e=s=>btoa(unescape(encodeURIComponent(s)));
+const b64d=s=>decodeURIComponent(escape(atob(s)));
+function giteeUrl(c){ return 'https://gitee.com/api/v5/repos/'+encodeURIComponent(c.owner)+'/'+
+  encodeURIComponent(c.repo)+'/contents/'+encodeURIComponent(c.path||'每日打卡数据.json'); }
+var cloudManual=false, cloudPinned=false;
+function setSync(){
+  const el=document.getElementById('syncStat'), c=cloudCfg();
+  let s, trouble=false;
+  if(Date.now()<rateLimitedUntil){ trouble=true;
+    s=`· Gitee 接口限流中，约 ${Math.ceil((rateLimitedUntil-Date.now())/60000)} 分钟后自动恢复（这期间的改动都安全存在本机）`; }
+  else if(!netOK){ trouble=true;
+    s='· 云端连接失败'+(c&&lastErr?('：'+lastErr):'')+' → 去「我的」检查同步设置'; }
+  else s=c?`· 同步：云端 ${c.owner}/${c.repo} · ${lastSyncAt?('最近对齐 '+lastSyncAt):'等待首次同步'}`
+          :'· 数据仅存本机 · 可在「我的」里启用 Gitee 云同步，手机电脑共用';
+  if(!c)trouble=true;
+  el.hidden=!trouble; el.textContent=s+(c?' ⚙ 同步设置':'');
+  const cs=document.getElementById('cloudStat');
+  if(cs)cs.textContent=c
+    ?`已启用：${c.owner}/${c.repo} · ${netOK?'连接正常':'暂离线'}`
+    :'未启用 · 配置后手机流量、任何 WiFi 都能同步（数据存你自己的 Gitee 私有仓库）';
+  const cc=document.getElementById('cloudCard');
+  if(cc){
+    if(!c||!netOK){ cloudManual=false; cc.hidden=false; }
+    else cc.hidden=!cloudPinned;
+  }
+}
+function pushSoon(){ clearTimeout(pushTimer); pushTimer=setTimeout(()=>pushNow(),600); }
+function adopt(j){ store=j;
+  if(!store.reports)store.reports=[]; if(!store.weeks)store.weeks={};
+  if(!store.reminders)store.reminders=[]; if(!store.customItems)store.customItems=[];
+  if(!store.checkup)store.checkup={vals:{},text:''};
+  try{ localStorage.setItem(LS,JSON.stringify(store)); }catch(e){}
+  renderAll(); }
+async function pushNow(){
+  store._ts=Date.now();
+  try{ localStorage.setItem(LS,JSON.stringify(store)); }catch(e){}
+  const c=cloudCfg();
+  if(c){ try{ await giteePut(c); netOK=true; lastSyncAt=nowHM(); lastErr=''; }
+    catch(e){ netOK=false; lastErr=e.message||'网络不通'; } }
+  setSync(); }
+async function giteePut(c){
+  const url=giteeUrl(c), ref=encodeURIComponent(c.branch||'master');
+  const body={access_token:c.token, content:b64e(JSON.stringify(store)),
+    message:'打卡数据更新', branch:c.branch||'master'};
+  if(giteeSha)body.sha=giteeSha;
+  let r=await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok&&!body.sha){ /* Gitee 新建文件只认 POST，PUT 仅用于更新 */
+    r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({access_token:c.token,content:body.content,message:body.message,branch:c.branch||'master'})}); }
+  if((r.status===400||r.status===409)&&body.sha){ /* sha 过期：重新取一次再推 */
+    const q=await fetch(url+'?access_token='+encodeURIComponent(c.token)+'&ref='+ref,{cache:'no-store'});
+    if(q.ok){ const j=await q.json(); giteeSha=j.sha; body.sha=j.sha;
+      r=await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
+    else if(q.status===404){ giteeSha=null; delete body.sha;
+      r=await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
+  }
+  if(!r.ok)throw new Error('推送失败 '+r.status+(r.status===404?'：仓库名/分支/文件名可能不对':'')+(r.status===401?'：令牌无效或过期':'')+(r.status===403?'：令牌权限不足或限流':''));
+  const j=await r.json(); if(j.content&&j.content.sha)giteeSha=j.content.sha; }
+async function giteePull(c){
+  const url=giteeUrl(c)+'?access_token='+encodeURIComponent(c.token)+
+    '&ref='+encodeURIComponent(c.branch||'master');
+  const r=await fetch(url,{cache:'no-store'});
+  if(r.status===404){ giteeSha=null; if(Object.keys(store.days).length)await pushNow(); return; }
+  if(r.status===401)throw new Error('令牌无效或过期（401）');
+  if(r.status===403)throw new Error('令牌权限不足（建令牌要勾 projects）或接口限流（403）');
+  if(!r.ok)throw new Error('Gitee '+r.status);
+  const j=await r.json(); giteeSha=j.sha;
+  let remote=null; try{ remote=JSON.parse(b64d((j.content||'').replace(/\s/g,''))); }catch(e){}
+  if(!remote||!remote.days){ if(Object.keys(store.days).length)await pushNow(); return; }
+  if((remote._ts||0)>(store._ts||0))adopt(remote);
+  else if((store._ts||0)>(remote._ts||0))await pushNow(); }
+async function pull(){
+  const c=cloudCfg();
+  if(!c)return;
+  try{
+    await giteePull(c);
+    netOK=true; lastSyncAt=nowHM(); lastErr='';
+  }catch(e){ netOK=false; lastErr=e.message||'网络不通';
+    if(/429/.test(String(e&&e.message)))rateLimitedUntil=Date.now()+5*60*1000; }
+  setSync(); renderAll();
+}
+async function poll(){
+  if(document.hidden)return;
+  if(!document.getElementById('overlay').classList.contains('hidden'))return;
+  if(Date.now()<rateLimitedUntil)return;
+  const c=cloudCfg();
+  if(!c)return;
+  try{
+    await giteePull(c);
+    netOK=true; lastSyncAt=nowHM(); lastErr='';
+  }catch(e){
+    netOK=false; lastErr=e.message||'网络不通';
+    if(/429/.test(String(e&&e.message)))rateLimitedUntil=Date.now()+5*60*1000;
+  }
+  setSync();
+}
+setInterval(()=>{ const c=cloudCfg(), now=Date.now();
+  if(c&&now-lastPoll>=15000){ lastPoll=now; poll(); } },2000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden)poll(); });
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('./sw.js').catch(()=>{}); }
+
+/* ============ 云同步设置 ============ */
+function initCloudCard(){ const c=cloudCfg();
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el&&v)el.value=v; };
+  set('cOwner',c&&c.owner); set('cRepo',c&&c.repo);
+  set('cPath',c&&c.path); set('cBranch',c&&c.branch); set('cToken',c&&c.token); }
+async function saveCloudCfgStart(){
+  const c={owner:document.getElementById('cOwner').value.trim(),
+    repo:document.getElementById('cRepo').value.trim(),
+    path:document.getElementById('cPath').value.trim()||'每日打卡数据.json',
+    branch:document.getElementById('cBranch').value.trim()||'master',
+    token:document.getElementById('cToken').value.trim()};
+  const rawPath=c.path; c.path=c.path.replace(/。/g,'.').replace(/．/g,'.').replace(/／/g,'/').trim().replace(/^\/+/,'');
+  if(c.path!==rawPath)toast('数据文件名已自动纠正为：'+c.path);
+  if(!c.owner||!c.repo||!c.token){ toast('Gitee 用户名、仓库名、令牌都要填'); return; }
+  if(/[^\x00-\x7F]/.test(c.owner)||/[^\x00-\x7F]/.test(c.repo)){ toast('用户名/仓库名要填网址里的英文，不能用中文显示名'); netOK=false; setSync(); return; }
+  if(/[^\x21-\x7E]/.test(c.token)){ toast('令牌里混入了空格或全角字符——重新复制一整串（不能带空格/换行）'); return; }
+  saveCloudCfg(c); toast('测试连接中…'); setSync();
+  try{ await giteePull(c); netOK=true; lastSyncAt=nowHM(); lastErr=''; setSync();
+    toast('云同步已启用 ✓ 数据已对齐'); }
+  catch(e){ netOK=false; lastErr=e.message; setSync(); toast('连接失败：'+e.message+'（检查令牌/用户名/仓库名）'); }
+}
+function stopCloudCfg(){ saveCloudCfg(null); giteeSha=null; toast('已停用云端，数据仅存本机'); setSync(); }
+/* ============ 工种模板库（10 类作息 × 通用项，入职关键词引擎从这里取件） ============ */
+const WT_META={
+ driver:{name:'驾驶/运输（司机）', water:8},
+ outdoor:{name:'户外作业（工地/配送）', water:8},
+ day:{name:'固定白班', water:6},
+ shift2:{name:'两班倒', water:7},
+ shift3:{name:'三班倒', water:7},
+ cycle4:{name:'四班两倒', water:7},
+ night:{name:'纯夜班', water:7},
+ free:{name:'自由职业', water:6},
+ retire:{name:'退休/居家', water:6},
+ student:{name:'学生', water:6},
+};
+const WATER=n=>[{id:'water',ico:'💧',name:`喝水达标（${n} 杯）`,note:'白天主动喝，别等渴',unit:'杯'}];
+const LIB_DRIVER=[
+ {id:'belt',ico:'🔒',name:'上车先系安全带',note:'每一程都系，包括短途倒车'},
+ {id:'rest2h',ico:'⏸️',name:'每开 2 小时停车活动 5 分钟',note:'下车走两步看远处，防腰突+防困'},
+ {id:'noFatigue',ico:'😴',name:'不疲劳驾驶',note:'连续驾驶≤4小时；犯困立即进服务区眯 15 分钟'},
+ {id:'caffDrive',ico:'☕',name:'咖啡因只在前半程',note:'收车前 6 小时停，保当晚睡眠'},
+ {id:'stretchBack',ico:'🧘',name:'腰背拉伸 10 分钟',note:'收车后小燕飞/猫式伸展，驾驶位最伤腰'},
+ {id:'noHeavyMeal',ico:'🍚',name:'饭后歇 20 分钟再开车',note:'饭后立刻开车易困，先休息再上路'}];
+const LIB_DAY=[
+ {id:'sleep2330',ico:'😴',name:'23:30 前上床',note:'白班需要 7~8h 睡眠'},
+ {id:'breakfast',ico:'🍳',name:'早餐吃够蛋白',note:'鸡蛋/牛奶/豆浆选一，别只吃碳水'},
+ {id:'lunchWalk',ico:'🚶',name:'午饭后走 10 分钟',note:'控血糖+防下午犯困'},
+ {id:'move30',ico:'🏃',name:'下班动一动 30 分钟',note:'快走/慢跑/力量都算'},
+ {id:'eyesRest',ico:'👀',name:'屏幕每 1 小时远眺 1 分钟',note:'久坐盯屏族护眼底线'},
+ {id:'nophone',ico:'📵',name:'睡前 1 小时不刷手机',note:'手机放卧室外充电'}];
+const LIB_S2={
+ '白':[{id:'s2wSleep',ico:'😴',name:'22:30 前上床',note:'白班日睡足，转夜前把觉攒够'},
+   {id:'s2wNoAl',ico:'🚫',name:'今晚不喝酒',note:'明晚夜班——转夜前夜禁酒'},
+   {id:'s2wPrep',ico:'🍱',name:'备好明天夜班的加餐',note:'煮蛋/牛奶/无糖酸奶，凌晨别泡面'}],
+ '夜':[{id:'s2nMeal',ico:'🍱',name:'主餐上班前吃',note:'吃完再出门，凌晨不饿不慌'},
+   {id:'s2nNoCarb',ico:'🚫',name:'凌晨零泡面零含糖',note:'只留蛋白质加餐'},
+   {id:'s2nCaff',ico:'☕',name:'咖啡因 02:00 后停',note:'下班能睡着的关键'},
+   {id:'s2nGlass',ico:'🕶️',name:'回家路上戴墨镜',note:'挡住阳光唤醒信号，白天睡得着'}]};
+const LIB_S3={
+ '早':[{id:'s3zSleep',ico:'😴',name:'22:00 前上床',note:'早班起得早，觉要往前抢'},
+   {id:'s3zBreak',ico:'🍳',name:'早餐吃好再出门',note:'早班最容易空肚子撑到中午'}],
+ '中':[{id:'s3mMove',ico:'🚶',name:'上午动一动',note:'中班下午才开工，上午别全睡了'},
+   {id:'s3mDinner',ico:'🍚',name:'开工前吃饱',note:'中班下班晚，别指望夜里大吃'},
+   {id:'s3mHome',ico:'🌙',name:'下班直接回家睡',note:'23 点后别再约局'}],
+ '夜':[{id:'s3yMeal',ico:'🍱',name:'主餐上班前吃',note:'吃完再出门，凌晨只加餐'},
+   {id:'s3yCaff',ico:'☕',name:'咖啡因 02:00 后停',note:'保白天能睡着'},
+   {id:'s3yGlass',ico:'🕶️',name:'回家戴墨镜',note:'挡阳光唤醒信号'}]};
+const LIB_C4={
+ '白':[{id:'sleepW',ico:'😴',name:'22:30 前上床',note:'白班日睡眠窗口只有 ~7.5h'},
+   {id:'noAlW',ico:'🚫',name:'今晚不喝酒',note:'明晚夜班——转夜前夜禁酒'}],
+ '夜':[{id:'meal18',ico:'🍱',name:'主餐 18:00 上班前吃',note:'吃完再出门，凌晨不饿不慌'},
+   {id:'noCarb',ico:'🚫',name:'凌晨零泡面零含糖',note:'只留蛋白质加餐'},
+   {id:'caff',ico:'☕',name:'咖啡因 02:00 后停',note:'睡眠+骨+胃三重理由'}],
+ '下':[{id:'glasses',ico:'🕶️',name:'回程戴墨镜',note:'挡住阳光唤醒信号，白天睡得着'},
+   {id:'nap',ico:'🛏️',name:'按模板补觉不贪长',note:'核心补觉 3~4h，醒了就起'},
+   {id:'sleep2230',ico:'🌙',name:'当晚 22:30 正常睡',note:'补觉+当晚早睡 ＞ 一口气睡 10h'}],
+ '休':[{id:'sleep00',ico:'🌙',name:'00:00 前睡',note:'真正休满的那天才要求'},
+   {id:'sun',ico:'☀️',name:'出门晒太阳 20~30 分钟',note:'合成维D，顺带买菜走路'},
+   {id:'nophone',ico:'📵',name:'少躺床刷手机',note:'睡眠/腰/眼三连击'}]};
+const LIB_NIGHT=[
+ {id:'nFixSleep',ico:'🛏️',name:'固定白天睡眠时段',note:'天天一致比睡得长更重要，比如 09:00-17:00'},
+ {id:'nDark',ico:'🌑',name:'遮光窗帘拉严',note:'白天睡眠质量翻倍的关键'},
+ {id:'nGlass',ico:'🕶️',name:'下班回家戴墨镜',note:'减少阳光唤醒信号'},
+ {id:'nMeal',ico:'🍱',name:'主餐上班前吃',note:'夜班中只加餐不正式进食'},
+ {id:'nNoCarb',ico:'🚫',name:'凌晨零泡面零含糖',note:'夜班代谢差，糖更伤'},
+ {id:'nCaff',ico:'☕',name:'咖啡因 02:00 后停',note:'全天限量两杯内'},
+ {id:'nVitd',ico:'☀️',name:'醒后出门晒 20 分钟',note:'纯夜班最容易缺维D'}];
+const LIB_FREE=[
+ {id:'fWake',ico:'⏰',name:'固定起床时间',note:'自由≠随缘，锚点定住全天节律'},
+ {id:'fFocus',ico:'🍅',name:'专注 3 个番茄钟',note:'先干最难的事，25分钟专注+5分钟歇'},
+ {id:'fOut',ico:'🌤️',name:'每天出门一次',note:'散步/买咖啡/见人，别一周不下楼'},
+ {id:'fMove',ico:'🏃',name:'运动 30 分钟',note:'时间自己挑，但每天别断'},
+ {id:'fCutoff',ico:'🛑',name:'设下班时间并执行',note:'工作无边=生活无边，到点关电脑'},
+ {id:'fPhone',ico:'📵',name:'睡前 1 小时不刷手机',note:'自己管自己更要有睡眠纪律'}];
+const LIB_RETIRE=[
+ {id:'rWake',ico:'🌅',name:'起床不晚于 7:30',note:'固定晨起是节律的地基'},
+ {id:'rMorning',ico:'🌤️',name:'上午出门活动',note:'买菜/晨练/会友，晒太阳+动腿'},
+ {id:'rNap',ico:'🛋️',name:'午睡 ≤30 分钟',note:'长午睡偷走夜间睡眠'},
+ {id:'rInterest',ico:'🎨',name:'做 1 件兴趣事',note:'书法/种花/棋牌/带孙都算，脑子越用越活'},
+ {id:'rDinner',ico:'🍲',name:'晚餐清淡七分饱',note:'晚餐要早要轻，睡得安稳'},
+ {id:'rFeet',ico:'🦶',name:'睡前泡脚/拉伸',note:'21:30 后开始，助眠又暖身'}];
+const LIB_STUDENT=[
+ {id:'stSleep',ico:'😴',name:'23:00 前上床',note:'8h+ 睡眠=记忆巩固，熬夜刷题不划算'},
+ {id:'stBreak',ico:'🥛',name:'早餐必吃',note:'蛋/奶+主食，上午才不塌'},
+ {id:'stEyes',ico:'👀',name:'课间望远 1 分钟',note:'每节课下看远处，防近视加深'},
+ {id:'stMove',ico:'🏀',name:'运动 1 小时',note:'体育课+课后都算，长个+减压'},
+ {id:'stPhone',ico:'📵',name:'娱乐手机 ≤1 小时',note:'固定时段刷，别挤占睡眠'},
+ {id:'stReview',ico:'📖',name:'睡前过一遍今天所学',note:'回忆式复盘 10 分钟，记得更牢'}];
+const FLAG_OUTDOOR=[
+ {id:'oSun',ico:'🧴',name:'防晒/劳保到位',note:'帽子+防晒；高温天避开正午'},
+ {id:'oBrk',ico:'🍌',name:'工间加餐垫一垫',note:'体力消耗大，兜里备点干粮'}];
+const FLAG_SEDENTARY=[
+ {id:'sdStand',ico:'🧍',name:'每坐 1 小时起身 3 分钟',note:'久坐是独立的健康风险，起身接水/走动'}];
+function libFor(p, sh){
+  let lib;
+  switch(p.type){
+    case 'driver': lib=LIB_DRIVER.slice(); break;
+    case 'day': lib=LIB_DAY.slice(); if(p.morningOff)lib.push({id:'mornOff',ico:'🌤️',name:'上午安排 1 件正事',note:'学习/运动/家务，别整上午刷手机'}); break;
+    case 'shift2': lib=(LIB_S2[sh]||[]).slice(); break;
+    case 'shift3': lib=(LIB_S3[sh]||[]).slice(); break;
+    case 'cycle4': lib=(LIB_C4[sh]||[]).slice(); break;
+    case 'night': lib=LIB_NIGHT.slice(); break;
+    case 'free': lib=LIB_FREE.slice(); break;
+    case 'retire': lib=LIB_RETIRE.slice(); break;
+    case 'student': lib=LIB_STUDENT.slice(); break;
+    default: lib=LIB_DAY.slice();
+  }
+  if(p.flags&&p.flags.outdoor&&p.type!=='driver')lib=lib.concat(FLAG_OUTDOOR);
+  if(p.flags&&p.flags.sedentary&&p.type==='day')lib=lib.concat(FLAG_SEDENTARY);
+  return lib;
+}
+const SHIFT_ICO={'白':'☀️','夜':'🌙','下':'🛌','休':'🏠','早':'🌅','中':'🌡️','班':'📋'};
+const SHIFT_LABEL={'白':'白班','夜':'夜班','下':'下夜班','休':'休班','早':'早班','中':'中班','班':'日常'};
+/* ============ 关键词引擎：自由描述 → 作息档案 ============ */
+function parseProfile(t){
+  t=t||'';
+  const flags={ outdoor:/户外|工地|快递|外卖|环卫|交警|巡线|绿化|搬运|装卸|巡检/.test(t),
+    driver:/司机|开车|驾驶|货车|长途|出租|网约|公交|大巴|冷藏|押运|代驾|跑运输|外卖|骑手|跑腿/.test(t),
+    sedentary:/办公室|白领|程序员|码农|文员|久坐|伏案|坐班|上班对着电脑|会计|设计/.test(t),
+    student:/学生|上学|高中|初中|大学|考研|高三|备考|住校/.test(t),
+    retire:/退休|赋闲|带孙|带娃/.test(t),
+    freelance:/自由职业|自由工作|在家办公|个体|自己做|创业|接单|远程办公|自媒体/.test(t) };
+  let type='day', seq=null;
+  if(flags.student)type='student';
+  else if(flags.retire&&!/上班|打工/.test(t))type='retire';
+  else if(flags.freelance)type='free';
+  else if(flags.driver)type='driver';
+  else if(/四班两倒|四班三|白夜下休|四班倒/.test(t)){type='cycle4';seq=['白','夜','下','休'];}
+  else if(/三班倒|早中夜|三班倒班/.test(t)){type='shift3';seq=['早','中','夜'];}
+  else if(/两班倒|日夜倒|黑白班|倒两班|倒班|轮班|翻班/.test(t)){type='shift2';seq=['白','夜'];}
+  else if(/纯夜班|长期夜班|固定夜班|常上夜班|一直上夜班|夜班为主|常年夜班/.test(t))type='night';
+  else if(/夜班/.test(t))type='night';
+  const morningOff=/上午休|上午不上|下午上班|只上下午|半天班/.test(t);
+  if(!seq&&type==='night')type=type; /* 纯夜班无循环 */
+  const water=(WT_META[type]||WT_META.day).water+(flags.outdoor||flags.driver?1:0);
+  return {type, seq, flags, morningOff, water, anchor:null};
+}
+function profileDesc(p){
+  const wt=(WT_META[p.type]||{}).name||'未知';
+  const parts=[wt];
+  if(p.seq)parts.push('循环：'+p.seq.map(s=>SHIFT_LABEL[s]).join('→'));
+  if(p.morningOff)parts.push('上午休');
+  if(p.flags&&p.flags.outdoor)parts.push('户外');
+  if(p.flags&&p.flags.sedentary)parts.push('久坐');
+  parts.push('喝水目标 '+p.water+' 杯/天');
+  return parts.join(' · ');
+}
+/* ============ 循环引擎（itemsFor 双参，班次按"那天"的日期算，补打卡才不串档） ============ */
+function autoShift(s){
+  const p=store.profile;
+  if(!p||!p.seq)return '班';
+  const anchor=p.anchor||todayStr(), n=p.seq.length;
+  return p.seq[((diffDays(anchor,s))%n+n)%n];
+}
+function shiftOf(s){ return (store.days[s]&&store.days[s].shift)||autoShift(s); }
+function itemsFor(sh, day){
+  day=day||sel;
+  const p=store.profile||obProfile||{type:'day',flags:{},water:6};
+  const win=store.customItems.filter(x=>(!x.start||day>=x.start)&&(!x.end||day<=x.end));
+  return win.concat(WATER(p.water)).concat(libFor(p,sh));
+}
+function dayHasRec(s){ const dd=store.days[s]; return dd&&Object.values(dd.items).some(Boolean); }
+/* ============ 视图切换 ============ */
+function switchTab(t){
+  document.querySelectorAll('#tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  document.getElementById('tab-ck').classList.toggle('hidden',t!=='ck');
+  document.getElementById('tab-cu').classList.toggle('hidden',t!=='cu');
+  document.getElementById('tab-me').classList.toggle('hidden',t!=='me');
+}
+function renderAll(){
+  if(!store.onboarded){ renderOnboard(); return; }
+  document.getElementById('onboardView').classList.add('hidden');
+  document.getElementById('appView').classList.remove('hidden');
+  render(); renderProfileCard(); renderCustom(); renderCkGrid();
+}
+
+/* ============ 打卡主视图渲染 ============ */
+function render(){
+  const t=todayStr();
+  const p=store.profile;
+  document.getElementById('dateLine').innerHTML=
+    t+' 周'+wdCN(t)+' · <span class="fixlink" style="text-decoration:none" title="班次不对？点这里修正" onclick="toggleFix()">班次'+((store.days[t]&&store.days[t].shift)?'手动指定':'自动识别')+'</span>';
+  /* 班次修正行 */
+  const fr=document.getElementById('shiftChips');
+  if(fixMode){
+    const cur=shiftOf(sel), isAuto=!(store.days[sel]&&store.days[sel].shift);
+    const labels=(p&&p.seq)||['班'];
+    fr.innerHTML='<span class="sub" style="align-self:center">把 '+sel+' 设为：</span>'+
+      labels.map(k=>`<button class="chip ${cur===k&&!isAuto?'on':''}" onclick="setShift('${k}')">${SHIFT_ICO[k]||'📋'} ${SHIFT_LABEL[k]||k}</button>`).join('')+
+      `<button class="chip ${isAuto?'on':''}" onclick="clearShift()">↩ 自动识别</button>`;
+    fr.classList.remove('hidden');
+  } else fr.classList.add('hidden');
+  /* 循环视图：seq 各天各一张卡，蓝标钉在"今天"（各天记录互相独立，点卡可切那天补打卡） */
+  const ct=document.getElementById('cycleTabs');
+  if(p&&p.seq){
+    ct.classList.remove('hidden');
+    ct.innerHTML=p.seq.map(k=>{
+      const d=cycleDayOf(k);
+      return `<button class="ctab ${d===t?'on':''}" onclick="sel='${d}';render()">
+        ${SHIFT_ICO[k]||'📋'} ${SHIFT_LABEL[k]||k}<small>${d.slice(5)}${d===t?' · 今天':''}</small></button>`;
+    }).join('');
+  } else ct.classList.add('hidden');
+  const eb=document.getElementById('editBanner');
+  if(sel!==t){ eb.classList.remove('hidden');
+    const sh=shiftOf(sel);
+    eb.innerHTML=`<span>✏️ 正在编辑 <b>${esc(sel.slice(5))} 周${wdCN(sel)} ${SHIFT_ICO[sh]||''} ${SHIFT_LABEL[sh]||sh}</b>（补打卡）</span><button class="btn" onclick="sel='${t}';render()">回到今天</button>`;
+  } else eb.classList.add('hidden');
+  /* 今日清单 */
+  const sh=shiftOf(sel);
+  document.getElementById('listDate').textContent=sel.slice(5)+' '+(SHIFT_LABEL[sh]||sh);
+  const items=itemsFor(sh, sel), r=store.days[sel];
+  let done=0;
+  document.getElementById('checklist').innerHTML=items.map(it=>{
+    const st=r&&r.items[it.id];
+    if(st==='done')done++;
+    const cls=st==='done'?'done':st==='miss'?'miss':'';
+    const txt=st==='done'?'✓ 做了':st==='miss'?'✗ 没做':'○ 未记录';
+    const nt=r&&r.notes?r.notes[it.id]:'';
+    return `<div class="row" data-id="${it.id}" onclick="cycle('${it.id}')" role="button" tabindex="0">
+      <div class="ico">${it.ico}</div>
+      <div class="tt"><b>${esc(it.name)}</b><span class="sub">${esc(it.note||'')}</span>`+
+      (nt?`<span class="noteline">📝 ${esc(nt)}</span>`:'')+
+      `</div>
+      <button class="nb ${nt?'has':''}" title="备注" onclick="event.stopPropagation();openNote('${it.id}')">✎</button>
+      <div class="st ${cls}">${txt}</div></div>`;
+  }).join('');
+  document.getElementById('daySummary').textContent=`共 ${items.length} 项，已完成 ${done}`;
+  /* 近7天 */
+  const days=[...Array(7)].map((_,i)=>addDays(t,i-6));
+  document.getElementById('strip').innerHTML=days.map(d=>{
+    const dd=store.days[d], s=shiftOf(d), its=itemsFor(s,d);
+    let doneC=0,missC=0;
+    if(dd)its.forEach(it=>{if(dd.items[it.id]==='done')doneC++;else if(dd.items[it.id]==='miss')missC++;});
+    let rs='–',sub='',col='';
+    if(dayHasRec(d)){
+      if(missC===0&&doneC===its.length){rs='✓';sub=its.length+'/'+its.length;col='style="color:var(--good-text);font-weight:700"';}
+      else if(doneC===0&&missC>0){rs='✗';sub='0/'+its.length;col='style="color:var(--bad);font-weight:700"';}
+      else{rs='◐';sub=doneC+'/'+its.length;}
+    }
+    return `<div class="day ${d===sel?'sel':''}" onclick="sel='${d}';render()">
+      <div class="wd">周${wdCN(d)}</div><div class="dd">${d.slice(8)}日</div>
+      <div class="sf">${SHIFT_ICO[s]||'📋'}</div><div class="rs" ${col}>${rs}${sub?`<small>${sub}</small>`:''}</div></div>`;
+  }).join('');
+  /* 提醒 */
+  const rs=store.reminders.slice().sort((a,b)=>a.due<b.due?-1:1);
+  document.getElementById('remMeta').textContent='· 共 '+rs.length+' 条，体检转来的会标 90 天复查';
+  document.getElementById('reminders').innerHTML=rs.length?rs.map(rm=>{
+    const left=diffDays(t,rm.due);
+    const cls=left<0?'hot':left<=rm.win?'':'ok';
+    const cnt=left<0?`已过 ${-left} 天！`:left===0?'就是今天':`剩 ${left} 天`;
+    return `<div class="rem ${cls}"><span>${esc(rm.name)} <span class="sub">${esc(rm.note||'')} · ${rm.due}</span></span>
+      <span class="cnt">${cnt}</span></div>`;
+  }).join(''):'<span class="sub">还没有提醒。体检分析页可一键生成 90 天复查提醒。</span>';
+  renderReview(); renderHistory();
+}
+function cycleDayOf(k){
+  const p=store.profile, t=todayStr();
+  if(!p||!p.seq)return t;
+  const anchor=p.anchor||t, n=p.seq.length;
+  const idxCur=((diffDays(anchor,t))%n+n)%n;
+  return addDays(t, p.seq.indexOf(k)-idxCur);
+}
+function renderReview(){
+  const card=document.getElementById('reviewCard'), t=todayStr();
+  const d=lastRecordedDay();
+  if(!d||store.reviewSeen===t){ card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const dd=store.days[d], sh=shiftOf(d), items=itemsFor(sh,d);
+  let done=0,miss=0;
+  const rows=items.map(it=>{
+    const st=dd.items[it.id];
+    if(st==='done')done++; else if(st==='miss')miss++;
+    return revRow(st,it);
+  }).join('');
+  const total=items.length, gap=diffDays(d,t);
+  const head = gap===1
+    ? (miss===0&&done===total ? '✅ 昨天全勤，漂亮！保持住 🔥'
+       : `昨天完成 <b>${done}/${total}</b>`+(miss?`，有 <b style="color:var(--bad)">${miss}</b> 项没做，今天捞回来`:''))
+    : `上次打卡是 <b>${gap}</b> 天前（${d}），那天完成 ${done}/${total}`;
+  const sh2=shiftOf(d);
+  document.getElementById('reviewMeta').textContent='· '+d+' 周'+wdCN(d)+' '+(SHIFT_LABEL[sh2]||sh2);
+  document.getElementById('reviewBody').innerHTML='<div class="revhead">'+head+'</div>'+rows;
+}
+function revRow(st,it){
+  const cls=st==='done'?'ok':st==='miss'?'no':'na';
+  const g=st==='done'?'✓':st==='miss'?'✗':'–';
+  return `<div class="revline ${cls}"><span class="g">${g}</span>`+
+    `<div class="mid">${it.ico} ${esc(it.name)}</div>`+
+    (st?`<span class="sub" style="flex:none">${st==='done'?'做了':'没做'}</span>`:'')+`</div>`;
+}
+function lastRecordedDay(){
+  const t=todayStr();
+  for(let i=1;i<=60;i++){ const d=addDays(t,-i);
+    if(dayHasRec(d))return d; }
+  return null;
+}
+function renderHistory(){
+  const t=todayStr();
+  const ds=Object.keys(store.days).filter(d=>d<=t&&dayHasRec(d)).sort().reverse();
+  if(!ds.length){ return; }
+  /* 历史明细折叠进"近7天"下方的卡片沿用旧交互：放在打卡页尾部动态生成 */
+  let host=document.getElementById('histHost');
+  if(!host){ host=document.createElement('div'); host.className='card';
+    host.id='histHost'; host.innerHTML='<h2>📅 历史记录 <span class="sub" id="histMeta"></span></h2><div id="historyList"></div>';
+    document.getElementById('tab-ck').appendChild(host); }
+  document.getElementById('histMeta').textContent='· 共 '+ds.length+' 天有记录，点开看明细';
+  document.getElementById('historyList').innerHTML=ds.slice(0,31).map(d=>{
+    const dd=store.days[d], sh=shiftOf(d), items=itemsFor(sh,d);
+    let done=0; items.forEach(it=>{ if(dd.items[it.id]==='done')done++; });
+    const rows=items.map(it=>revRow(dd.items[it.id],it)).join('');
+    return `<details class="hist"><summary>
+      <span>${d} 周${wdCN(d)} ${SHIFT_ICO[sh]||''} ${SHIFT_LABEL[sh]||sh}</span>
+      <span><b>${done}/${items.length}</b>
+        <button class="btn" style="padding:2px 8px;font-size:12px;margin-left:6px"
+          onclick="event.preventDefault();sel='${d}';render();switchTab('ck')">补打卡</button></span></summary>
+      <div class="hd" style="padding:2px 2px 10px">${rows}</div></details>`;
+  }).join('');
+}
+/* ============ 打卡交互 ============ */
+function cycle(id){
+  if(lpOn){ lpOn=false; return; }
+  const r=rec(sel), cur=r.items[id];
+  r.items[id]=cur==='done'?'miss':cur==='miss'?undefined:'done';
+  if(r.items[id]===undefined)delete r.items[id];
+  save(); render();
+}
+function toggleFix(){ fixMode=!fixMode; render(); }
+function setShift(k){ rec(sel).shift=k; save(); fixMode=false; render(); }
+function clearShift(){ if(store.days[sel])delete store.days[sel].shift; save(); fixMode=false; render(); }
+/* 长按/右键 → 备注 */
+let lpT=null, lpOn=false, noteTarget=null;
+const cl=document.getElementById('checklist');
+cl.addEventListener('touchstart',e=>{
+  const row=e.target.closest('.row'); if(!row)return; lpOn=false;
+  lpT=setTimeout(()=>{ lpOn=true; openNote(row.dataset.id); },550);
+},{passive:true});
+cl.addEventListener('touchmove',()=>clearTimeout(lpT),{passive:true});
+cl.addEventListener('touchend',()=>clearTimeout(lpT));
+cl.addEventListener('contextmenu',e=>{
+  const row=e.target.closest('.row'); if(!row)return;
+  e.preventDefault(); openNote(row.dataset.id);
+});
+function openNote(id){
+  noteTarget=id;
+  const items=itemsFor(shiftOf(sel), sel), it=items.find(x=>x.id===id);
+  document.getElementById('noteTitle').textContent='📝 备注 · '+(it?it.name:id);
+  const sh=shiftOf(sel);
+  document.getElementById('noteSub').textContent=sel+' '+(SHIFT_LABEL[sh]||sh)+' · 记录具体做了多少';
+  document.getElementById('noteText').value=noteOf(sel,id);
+  document.getElementById('overlay').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('noteText').focus(),50);
+}
+function closeNote(){ document.getElementById('overlay').classList.add('hidden'); noteTarget=null; }
+function saveNote(){
+  if(!noteTarget)return;
+  const v=document.getElementById('noteText').value.trim();
+  const r=rec(sel); if(!r.notes)r.notes={};
+  if(v)r.notes[noteTarget]=v; else delete r.notes[noteTarget];
+  save(); closeNote(); render(); toast('备注已保存 ✓');
+}
+function clearNote(){
+  if(!noteTarget)return;
+  const r=rec(sel); if(r.notes)delete r.notes[noteTarget];
+  save(); closeNote(); render(); toast('备注已删除');
+}
+/* 提醒 */
+function openAddRem(){ document.getElementById('remDue').value=todayStr();
+  document.getElementById('remName').value=''; document.getElementById('remNote').value='';
+  document.getElementById('remOverlay').classList.remove('hidden'); }
+function closeAddRem(){ document.getElementById('remOverlay').classList.add('hidden'); }
+function saveAddRem(){
+  const name=document.getElementById('remName').value.trim();
+  const due=document.getElementById('remDue').value;
+  if(!name||!due){ toast('名称和日期都要填'); return; }
+  store.reminders.push({name, due, note:document.getElementById('remNote').value.trim(), win:14});
+  save(); closeAddRem(); render(); toast('提醒已加 ✓');
+}
+function dismissReview(){ store.reviewSeen=todayStr(); save();
+  document.getElementById('reviewCard').classList.add('hidden'); }
+/* ============ 我的作息档案卡 ============ */
+function renderProfileCard(){
+  const p=store.profile;
+  if(!p){ document.getElementById('profileCard').innerHTML='<span class="sub">尚未完成入职</span>'; return; }
+  const wt=(WT_META[p.type]||{}).name||'未知';
+  document.getElementById('profileCard').innerHTML=
+    `<div style="font-size:14.5px;line-height:1.9">
+      <b>${esc(profileDesc(p))}</b><br>
+      <span class="sub">生成方式：对话式入职 · 随时可「重新入职」重答</span>
+      ${p.seq?`<br><span class="sub">循环锚点：${p.anchor||todayStr()}（这天是 ${SHIFT_LABEL[p.seq[0]]||p.seq[0]}），可在下方修正</span>`:''}
+    </div>`
+    +(p.seq?`<div id="anchorChips" style="margin-top:8px"><span class="sub">今天实际是：</span>`+
+      p.seq.map(k=>`<button class="chip" style="margin-top:4px" onclick="fixAnchor('${k}')">${SHIFT_ICO[k]||'📋'} ${SHIFT_LABEL[k]||k}</button>`).join('')+`</div>`:'');
+}
+function fixAnchor(k){
+  const p=store.profile; if(!p||!p.seq)return;
+  const t=todayStr();
+  p.anchor=addDays(t, -p.seq.indexOf(k)); /* 让今天落在 k 位 */
+  save(); renderProfileCard(); render(); toast('循环已对齐：今天='+ (SHIFT_LABEL[k]||k));
+}
+/* ============ 自定义打卡项（可带起止日期，窗口内自动出现） ============ */
+function renderCustom(){
+  const host=document.getElementById('customList');
+  const cs=store.customItems;
+  host.innerHTML=cs.length?cs.map((c,i)=>{
+    const w=c.start||c.end?`<span class="sub">${c.start||'…'} ~ ${c.end||'…'}</span>`:'<span class="sub">长期</span>';
+    return `<div class="row" style="cursor:default"><div class="ico">${c.ico||'📌'}</div>
+      <div class="tt"><b>${esc(c.name)}</b><span class="sub">${esc(c.note||'')}</span>${w}</div>
+      <button class="btn del" style="color:var(--bad)" onclick="delCustom(${i})">删</button></div>`;
+  }).join(''):'<span class="sub">还没有自定义项。用药疗程、阶段目标都能加——可设起止日期，到点自动从清单消失。</span>';
+}
+function addCustom(){
+  const name=document.getElementById('cusName').value.trim();
+  if(!name){ toast('先填名称'); return; }
+  const ico=document.getElementById('cusIco').value.trim()||'📌';
+  const note=document.getElementById('cusNote').value.trim();
+  const id='cus'+Date.now().toString(36);
+  store.customItems.push({id, ico, name, note, unit:'次'});
+  save(); renderCustom(); render();
+  document.getElementById('cusName').value=''; document.getElementById('cusNote').value='';
+  toast('已加入今日清单 ✓');
+}
+function delCustom(i){
+  const c=store.customItems[i];
+  if(confirm('删除「'+(c?c.name:'')+'」？历史记录保留。')){
+    store.customItems.splice(i,1); save(); renderCustom(); render();
+  }
+}
+/* ============ 周报（自然周一~周日 · 新一周首开自动弹 · 查漏补缺+下周重点） ============ */
+function prevMonday(){ return addDays(mondayOf(todayStr()),-7); }
+function profileDoDont(p){
+  const base={
+    driver:{do:['每 2 小时停车活动 5 分钟（腰+防困）','连续驾驶不超过 4 小时，犯困立刻停','收车后腰背拉伸 10 分钟','每天喝水 8 杯上下，别用饮料替水'],
+      dont:['疲劳驾驶（比酒驾更常见的事故原因）','饭后立刻开车','收车前 6 小时内喝咖啡/浓茶','憋尿开车（膀胱和前列腺都会记账）']},
+    day:{do:['23:30 前上床，睡足 7~8 小时','早餐吃够蛋白质','每天动 30 分钟，午饭后走 10 分钟','屏幕每小时远眺 1 分钟'],
+      dont:['睡前 1 小时刷手机','早餐只吃碳水','久坐一上午不起身','拿咖啡硬撑过困点']},
+    night:{do:['固定白天睡眠时段，天天一致','下班戴墨镜、遮光窗帘拉严','主餐上班前吃，凌晨只加蛋白','醒后出门晒太阳 20 分钟'],
+      dont:['凌晨泡面/含糖饮料（夜班代谢红线）','02:00 后咖啡因','用酒精助眠白天觉','连续多日睡不满 6 小时还不调班']},
+    retire:{do:['起床不晚于 7:30，上午出门活动','午睡 ≤30 分钟','每天 1 件兴趣事，脑子越用越活','晚餐清淡七分饱'],
+      dont:['午睡一睡一下午','整天不出门','晚饭吃太晚太咸','久坐打牌一整天']},
+    student:{do:['23:00 前睡，睡够 8 小时','早餐必吃','每天运动 1 小时','课间望远防近视'],
+      dont:['熬夜刷题（睡眠=记忆巩固，熬夜白学）','娱乐手机无限刷','早餐不吃撑到中午','躺床刷手机入睡']},
+  };
+  const k=(p&&(['driver','night','retire','student'].includes(p.type)))?p.type:'day';
+  return base[k];
+}
+function buildWeekly(mon){
+  const t=todayStr(), days=[...Array(7)].map((_,i)=>addDays(mon,i));
+  const per={}; let totalA=0,totalD=0,untracked=0; const noteLog=[];
+  days.forEach(d=>{
+    const dd=store.days[d], its=itemsFor(shiftOf(d),d);
+    if(!dd||Object.keys(dd.items).length===0){ untracked++;
+      its.forEach(it=>{ const q=per[it.id]||(per[it.id]={id:it.id,name:it.name,app:0,done:0,miss:0,notes:[]});
+        q.app++; q.miss++; totalA++; });
+      return; }
+    its.forEach(it=>{
+      const q=per[it.id]||(per[it.id]={id:it.id,name:it.name,app:0,done:0,miss:0,notes:[]});
+      q.app++; totalA++;
+      if(dd.items[it.id]==='done'){ q.done++; totalD++; } else q.miss++;
+      const nt=dd.notes?dd.notes[it.id]:'';
+      if(nt){ const neg=/没|未|不|忘|错过|漏/.test(nt);
+        q.notes.push({d:d.slice(5),text:nt,neg});
+        noteLog.push({d:d.slice(5),name:it.name,text:nt,neg}); }
+    });
+  });
+  const rate=totalA?Math.round(totalD/totalA*100):0;
+  const rows=Object.values(per).map(p=>({ id:p.id, name:p.name, app:p.app, done:p.done,
+      rate:p.app?Math.round(p.done/p.app*100):0, notes:p.notes }))
+    .map(r=>{ r.v=r.rate>=85?'👍 稳':r.rate>=50?'⚠️ 不稳':'❌ 掉队'; return r; })
+    .sort((a,b)=>a.rate-b.rate);
+  const stable=rows.filter(r=>r.rate>=85&&r.app>0);
+  const miss=rows.filter(r=>r.rate<85);
+  const TIPS={water:'工位/车上放个大水杯，每小时喝两口', belt:'系安全带是第一动作，上车就系再点火',
+    sleep2330:'手机放客厅充电，定 23:00 洗漱闹钟', nophone:'手机不进卧室，躺床只看纸质书',
+    move30:'提前一天约人，定了就不放鸽子', stSleep:'手机交给家长/放远处，闹钟定洗漱'};
+  let focus=[];
+  miss.slice(0,4).forEach(r=>focus.push(r.name+'（'+r.rate+'%）→ '+(TIPS[r.id]||'先保证隔天做一次')));
+  if(!focus.length) focus.push('上周全绿 ✅ 保持现节奏，可挑战把薄弱项提到 90%+');
+  if(focus.length>6) focus=focus.slice(0,6);
+  const sig=noteLog.filter(n=>n.neg).map(n=>'⚠️ '+n.d+' '+n.name+'：「'+n.text+'」');
+  const dueR=store.reminders.filter(rm=>diffDays(t,rm.due)<=45);
+  const dd=profileDoDont(store.profile);
+  const L=[];
+  L.push('# 📋 上周周报（'+mon+' ~ '+days[6]+'）');
+  L.push('');
+  L.push('**作息**：'+profileDesc(store.profile||{type:'day',flags:{},water:6}));
+  L.push('**总完成率：'+rate+'%**（记录 '+(7-untracked)+'/7 天'+(untracked?'，'+untracked+' 天未打卡':'')+'）');
+  L.push('');
+  L.push('| 事项 | 做了/适用 | 完成率 | 判定 | 备注 |');
+  L.push('|---|---|---|---|---|');
+  rows.forEach(r=>L.push('| '+r.name+' | '+r.done+'/'+r.app+' | '+r.rate+'% | '+r.v+' | '+(r.notes.length?r.notes.length+' 条':'—')+' |'));
+  L.push('');
+  if(miss.length){ L.push('**🔴 查漏补缺（上周漏掉的）**：');
+    miss.forEach(r=>L.push('- '+r.name+' '+r.rate+'%（'+r.done+'/'+r.app+'）→ 补法：'+(TIPS[r.id]||'先保证隔天做一次')));
+    L.push(''); }
+  L.push('**🎯 下周重点**：');
+  focus.forEach((f,i)=>L.push((i+1)+'. '+f));
+  L.push('');
+  L.push('**✅ 该做（每周基线）**：'+dd.do.join('；'));
+  L.push('**❌ 不该做（红线）**：'+dd.dont.join('；'));
+  if(sig.length){ L.push(''); L.push('**📝 上周备注信号**：'); sig.forEach(s=>L.push('- '+s.replace(/\|/g,'／'))); }
+  if(dueR.length){ L.push(''); L.push('**⏰ 提醒（45 天内）**：'+dueR.map(rm=>rm.name+'（'+rm.due+'，剩 '+Math.max(0,diffDays(t,rm.due))+' 天）').join(' · ')); }
+  const ck=latestCheckupLine();
+  if(ck){ L.push(''); L.push('**🧪 最近体检**：'+ck); }
+  L.push(''); L.push('*生成：每日打卡 App（行为层建议，不构成诊疗意见）*');
+  const md=L.join('\n');
+  const html=
+   '<h3>📋 上周周报（'+mon.slice(5)+' ~ '+days[6].slice(5)+'）</h3>'
+   +'<div class="wk-hero"><span class="hero" style="font-size:38px">'+rate+'</span>'
+   +'<span class="wk-sub">总完成率 · 记录 '+(7-untracked)+'/7 天'+(untracked?'（'+untracked+' 天没打卡）':'')+'</span></div>'
+   +'<div class="wk-sec"><h4>'+(miss.length?'🔴 查漏补缺 —— 上周漏掉的':'✅ 查漏补缺')+'</h4>'
+   +(miss.length
+     ?'<ul class="wk-list">'+miss.map(r=>'<li><b>'+esc(r.name)+'</b> '+r.rate+'%（'+r.done+'/'+r.app+'）<br>'
+       +'<span class="wk-sub">补法：'+esc(TIPS[r.id]||'先保证隔天做一次')+'</span></li>').join('')+'</ul>'
+     :'<div class="wk-sub">没有明显掉队项，干得漂亮 👍</div>')
+   +'</div>'
+   +'<div class="wk-sec"><h4>🎯 下周重点（就做这几件）</h4><ol class="wk-list">'
+   +focus.map(f=>'<li>'+esc(f)+'</li>').join('')+'</ol></div>'
+   +'<div class="wk-sec"><h4>✅ 该做（每周基线）</h4><div class="wk-chips">'
+   +dd.do.map(s=>'<span class="ok">'+esc(s)+'</span>').join('')+'</div></div>'
+   +'<div class="wk-sec"><h4>❌ 不该做（红线）</h4><div class="wk-chips">'
+   +dd.dont.map(s=>'<span class="no">'+esc(s)+'</span>').join('')+'</div></div>'
+   +(stable.length?'<div class="wk-sec"><h4>💪 上周做稳的（≥85%）</h4><div class="wk-chips">'
+     +stable.map(r=>'<span class="ok">'+esc(r.name)+' '+r.rate+'%</span>').join('')+'</div></div>':'')
+   +(sig.length?'<div class="wk-sec"><h4>📝 备注信号</h4><ul class="wk-list">'
+     +sig.map(s=>'<li>'+esc(s)+'</li>').join('')+'</ul></div>':'')
+   +(dueR.length?'<div class="wk-sec"><h4>⏰ 提醒</h4><div class="wk-sub">'
+     +esc(dueR.map(rm=>rm.name+'：'+rm.due+'（剩 '+Math.max(0,diffDays(t,rm.due))+' 天）').join(' · '))+'</div></div>':'');
+  return { md, html, rows, rate };
+}
+function latestCheckupLine(){
+  const v=store.checkup&&store.checkup.vals;
+  if(!v)return '';
+  const ks=Object.keys(v);
+  if(!ks.length)return '';
+  const parts=ks.map(k=>{ const ind=INDByKey(k); if(!ind)return null;
+    const e=v[k];
+    const val=k==='bp'?(e.sy+'/'+e.di):e.val;
+    return ind.name+' '+val; }).filter(Boolean);
+  return parts.length?parts.join(' · ')+(v[ks[0]].at?('（'+v[ks[0]].at+'）'):''):'';
+}
+function maybeWeeklyAuto(){
+  const wk=mondayOf(todayStr());
+  if(store.weeklySeen===wk)return;
+  store.weeklySeen=wk; save();
+  if(!Object.keys(store.days).length)return;
+  openWeekly();
+}
+function openWeekly(){
+  const rep=buildWeekly(prevMonday());
+  weeklyMd=rep.md;
+  document.getElementById('wkBody').innerHTML=rep.html;
+  document.getElementById('wkOverlay').classList.remove('hidden');
+}
+function closeWeekly(){ document.getElementById('wkOverlay').classList.add('hidden'); }
+function copyWeekly(){ if(!weeklyMd)openWeekly(); copyText(weeklyMd,'周报已复制 ✓'); }
+function copyText(txt,okMsg){
+  if(!txt){ toast('没有可复制的内容'); return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(txt).then(()=>toast(okMsg),()=>fallbackCopy(txt,okMsg));
+  else fallbackCopy(txt,okMsg);
+}
+function fallbackCopy(txt,okMsg){
+  const ta=document.createElement('textarea'); ta.value=txt;
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast(okMsg); }
+  catch(e){ toast('复制失败'); }
+  document.body.removeChild(ta);
+}
+/* ============ 体检指标库（16 项起步 · 参考区间为常见成人标准，以报告为准） ============
+   side：'hi'=高才是问题 'lo'=低才是问题 'both'=两侧都算；mid 区间=临界（灰区） */
+const IND=[
+ {k:'glu',name:'空腹血糖',unit:'mmol/L',re:'空腹血糖|血糖',ref:[3.9,6.1],side:'hi',mid:[6.2,6.9],
+  hard:[7.0,'≥7.0 结合症状需就医排查糖尿病'],
+  advHi:'主食定量、加粗杂粮；含糖饮料直接戒掉；三餐后散步 20 分钟——这一条对血糖比什么都划算',
+  advLo:'易心慌手抖、出冷汗的话随身带块糖；规律三餐，别空腹高强度运动',
+  item:{ico:'🍚',name:'主食定量+餐后散步 20 分钟',note:'血糖偏高行为处方',gid:'diet'}},
+ {k:'hba1c',name:'糖化血红蛋白',unit:'%',re:'糖化(?:血红蛋白)?|HbA1c',ref:[4.0,6.0],side:'hi',mid:[6.1,6.4],
+  hard:[6.5,'≥6.5% 建议尽快就医明确诊断'],
+  advHi:'近 3 个月平均血糖偏高：主食减量、戒含糖饮料、每天走路 30 分钟起步',
+  item:{ico:'🍚',name:'主食定量+餐后散步 20 分钟',note:'血糖偏高行为处方',gid:'diet'}},
+ {k:'ua',name:'尿酸',unit:'μmol/L',re:'尿酸',refM:[208,428],refF:[155,357],side:'hi',mid:[429,479],
+  hard:[540,'≥540 痛风风险高，建议就医评估'],
+  advHi:'内脏/海鲜/浓肉汤/啤酒四样先停，每天喝水 2000ml 以上，但别突然剧烈运动（诱发痛风）',
+  item:{ico:'🚫',name:'低嘌呤饮食（忌内脏海鲜啤酒）',note:'尿酸偏高行为处方',gid:'ua'}},
+ {k:'tc',name:'总胆固醇',unit:'mmol/L',re:'总胆固醇',ref:[2.8,5.2],side:'hi',mid:[5.3,6.1],
+  advHi:'少油炸少肥肉，主食里加燕麦/豆类；每天 30 分钟快走是最便宜的他汀',
+  item:{ico:'🥗',name:'少油少炸+每天快走 30 分钟',note:'血脂偏高行为处方',gid:'lipid'}},
+ {k:'tg',name:'甘油三酯',unit:'mmol/L',re:'甘油三酯',ref:[0.4,1.7],side:'hi',mid:[1.8,2.2],
+  hard:[5.6,'≥5.6 有胰腺炎风险，尽快就医'],
+  advHi:'先戒含糖饮料和酒（甘油三酯对糖和酒最敏感），主食减量，两周就能看到变化',
+  item:{ico:'🥗',name:'少油少炸+每天快走 30 分钟',note:'血脂偏高行为处方',gid:'lipid'}},
+ {k:'hdl',name:'高密度脂蛋白',unit:'mmol/L',re:'高密度(?:脂蛋白)?',refM:[1.0,2.2],refF:[1.3,2.2],side:'lo',
+  advLo:'偏低：有氧运动是唯一能拉高它的生活方式——每周 5 天、每次 30 分钟；戒烟',
+  item:{ico:'🏃',name:'有氧运动 30 分钟×5 天/周',note:'好胆固醇偏低行为处方',gid:'lipid'}},
+ {k:'ldl',name:'低密度脂蛋白',unit:'mmol/L',re:'低密度(?:脂蛋白)?',ref:[1.9,3.4],side:'hi',mid:[3.5,4.0],
+  hard:[4.9,'≥4.9 建议就医评估心血管风险'],
+  advHi:'少动物油少油炸，燕麦/坚果/鱼轮换着吃；每天 30 分钟有氧',
+  item:{ico:'🥗',name:'少油少炸+每天快走 30 分钟',note:'血脂偏高行为处方',gid:'lipid'}},
+ {k:'hgb',name:'血红蛋白',unit:'g/L',re:'血红蛋白',refM:[130,175],refF:[115,150],side:'both',
+  advLo:'偏低（贫血方向）：红肉/动物血/肝脏每周 2~3 次，配维C水果吸收更好；持续偏低要查原因',
+  advHi:'偏高常见于脱水、吸烟、长期缺氧环境；长期明显偏高需就医排查',
+  item:{ico:'🥩',name:'补铁餐每周 2~3 次',note:'血红蛋白偏低行为处方',gid:'iron'}},
+ {k:'fer',name:'铁蛋白',unit:'ng/ml',re:'铁蛋白',refM:[30,400],refF:[13,150],side:'both',
+  advLo:'偏低=铁储备不足：同补铁餐方案，动物铁比植物铁好吸收',
+  advHi:'偏高可能是炎症/肝问题，结合转氨酶看；明显偏高建议就医',
+  item:{ico:'🥩',name:'补铁餐每周 2~3 次',note:'铁储备不足行为处方',gid:'iron'}},
+ {k:'vitd',name:'25(OH)D 维生素D',unit:'ng/ml',re:'25\\s*[-(（]?\\s*(?:OH|羟|羟基)\\s*[-)）]?\\s*(?:维|维生素)?\\s*D(?!3)|维生素\\s*D(?!3)|维D(?!3)',ref:[30,100],side:'lo',mid:[20,29],
+  advLo:'不足：维D3 每天 800~1000 IU 随餐吃 + 日晒 20 分钟（10~15 点最好）；检验单若为 nmol/L，除以 2.5 再对比',
+  item:{ico:'💊',name:'维D3 800IU 随餐+晒太阳 20 分钟',note:'维生素D不足行为处方',gid:'vitd'}},
+ {k:'tsh',name:'促甲状腺激素 TSH',unit:'mIU/L',re:'促甲状腺|TSH',ref:[0.35,5.0],side:'both',
+  hard:[10.0,'TSH 明显升高建议尽快就医（甲减方向）'],
+  advHi:'偏高（甲减方向）：行为帮不了太多，规范复查甲功三项，遵医嘱',
+  advLo:'偏低（甲亢方向）：少熬夜少咖啡因，尽快复查确认',
+  remOnly:{name:'甲状腺功能复查',win:90}},
+ {k:'alt',name:'谷丙转氨酶 ALT',unit:'U/L',re:'谷丙转氨酶|ALT',refM:[9,50],refF:[7,35],side:'hi',mid:[51,79],
+  hard:[120,'≥120 明显升高，尽快就医查因'],
+  advHi:'最常见原因是脂肪肝/饮酒/熬夜/药物：先戒酒、23:30 前睡、少油炸，1~3 个月后复查多半回落',
+  item:{ico:'🚭',name:'戒酒+23:30 前睡',note:'转氨酶偏高行为处方',gid:'liver'}},
+ {k:'cr',name:'肌酐',unit:'μmol/L',refM:[57,97],refF:[41,73],side:'hi',
+  hard:[133,'明显升高提示肾功能问题，尽快就医'],
+  advHi:'少盐少腌制品，每天喝水达标，别乱吃止痛药和偏方，规律复查肾功能',
+  remOnly:{name:'肾功能复查',win:90},
+  item:{ico:'💧',name:'每天喝水达标+少盐',note:'肾功能指标偏高行为处方',gid:'kidney'}},
+ {k:'bun',name:'尿素氮',unit:'mmol/L',re:'尿素氮',ref:[2.9,8.2],side:'hi',
+  advHi:'偏高常见于高蛋白饮食/脱水：先喝水达标、蛋白质别顿顿大鱼大肉，再复查',
+  item:{ico:'💧',name:'每天喝水达标+少盐',note:'肾功能指标偏高行为处方',gid:'kidney'}},
+ {k:'bp',name:'血压',unit:'mmHg',re:'血压',special:'bp',refTxt:'理想 <120/80 · 临界 120-139/80-89 · ≥140/90 偏高',
+  advHi:'限盐 <5g/天（一啤酒瓶盖），每天快走 30 分钟，在家定时测血压记录',
+  item:{ico:'🧂',name:'限盐<5g/天+定时测血压',note:'血压偏高行为处方',gid:'bp'}},
+ {k:'bmi',name:'BMI',unit:'kg/m²',re:'BMI|体重指数|体质指数',ref:[18.5,23.9],side:'both',mid:[24.0,27.9],
+  hard:[0,'<18.5 或 ≥28 都建议咨询医生/营养师'],
+  advHi:'晚餐主食减半+每天快走 30 分钟起步，每月瘦 1~2kg 就是健康速度',
+  advLo:'偏瘦：三餐加量加餐，蛋白吃够，别靠零食凑热量',
+  item:{ico:'⚖️',name:'晚餐主食减半+快走 30 分钟',note:'体重管理行为处方',gid:'weight'}},
+];
+function indRef(d,sex){
+  if(d.ref)return d.ref;
+  return sex==='f'&&d.refF?d.refF:(d.refM||d.ref);
+}
+function INDByKey(k){ return IND.find(d=>d.k===k)||null; }
+function bpClass(sy,di){
+  if(sy>=140||di>=90)return {st:'hi',sev:sy>=160||di>=100};
+  if(sy>=120||di>=80)return {st:'mid'};
+  return {st:'ok'};
+}
+function statusOf(d,val,sex){
+  if(d.k==='bp')return null; /* 血压走 bpClass */
+  const [lo,hi]=indRef(d,sex);
+  if(val<lo)return {st:'lo',delta:+(((val-lo)/lo)*100).toFixed(0)};
+  if(val>hi){
+    if(d.mid&&val>=d.mid[0]&&val<=d.mid[1])return {st:'mid',delta:+(((val-hi)/hi)*100).toFixed(0)};
+    const hard=d.hard&&d.hard[0]&&val>=d.hard[0];
+    return {st:'hi',delta:+(((val-hi)/hi)*100).toFixed(0),sev:!!hard};
+  }
+  if(d.side==='both'&&d.mid&&val>=d.mid[0]&&val<=d.mid[1])return {st:'mid',delta:0};
+  return {st:'ok',delta:0};
+}
+/* ============ 体检录入 & 联合分析 ============ */
+function saveLocal(){ store._ts=store._ts||Date.now();
+  try{ localStorage.setItem(LS,JSON.stringify(store)); }catch(e){} }
+let ckSex=localStorage.getItem(LS+'.sex')||'m';
+function setSex(s){ ckSex=s; localStorage.setItem(LS+'.sex',s);
+  if(store.profile){store.profile.sex=s;} saveLocal(); renderCkGrid(); }
+function renderCkGrid(){
+  const g=document.getElementById('ckGrid'); if(!g)return;
+  const v=store.checkup.vals||{};
+  g.innerHTML=
+   '<div class="ckfld" style="grid-column:1/-1"><label>性别（参考区间男女不同）</label>'+
+   '<div class="chips" style="margin-top:4px">'+
+   `<button class="chip ${ckSex==='m'?'on':''}" onclick="setSex('m')">男</button>`+
+   `<button class="chip ${ckSex==='f'?'on':''}" onclick="setSex('f')">女</button></div></div>`
+   +IND.map(d=>{
+     const rng=d.k==='bp'?d.refTxt:(()=>{const r=indRef(d,ckSex);
+       return '参考 '+r[0]+'~'+r[1]+(d.unit?(' '+d.unit):'');})();
+     const val=d.k==='bp'?((v.bp&&v.bp.sy?v.bp.sy+'/'+v.bp.di:'')||''):(v[d.k]?v[d.k].val:'');
+     return `<div class="ckfld"><label>${d.name}</label>
+       <input id="ck_${d.k}" value="${val}" placeholder="如：${d.k==='bp'?'135/85':'数值'}"
+         oninput="ckInput('${d.k}',this.value)">
+       <span class="rng">${rng}</span></div>`;
+   }).join('');
+}
+function ckInput(k,val){
+  val=String(val).trim(); if(!val){ delete store.checkup.vals[k]; saveLocal(); return; }
+  if(k==='bp'){ const m=val.match(/(\d{2,3})\s*[\/／·]\s*(\d{2,3})/);
+    if(m)store.checkup.vals.bp={sy:+m[1],di:+m[2],at:todayStr()};
+    return; }
+  const num=parseFloat(val);
+  if(isNaN(num))return;
+  store.checkup.vals[k]={val:num,at:todayStr()};
+}
+function normalizeVitd(){
+  const v=store.checkup.vals.vitd;
+  if(v&&v.val>110){ v.val=+(v.val/2.5).toFixed(1); v.note='检测单位是 nmol/L，已换算成 ng/ml';
+    toast('维D 单位是 nmol/L，已换算为 ng/ml'); }
+}
+function pasteReport(){
+  document.getElementById('pasteText').value=store.checkup.text||'';
+  document.getElementById('pasteOverlay').classList.remove('hidden'); }
+function closePaste(){ document.getElementById('pasteOverlay').classList.add('hidden'); }
+function doParsePaste(){
+  const txt=document.getElementById('pasteText').value;
+  if(!txt.trim()){ toast('先粘贴报告文字'); return; }
+  store.checkup.text=txt;
+  const lines=txt.split(/[\n\r；;，,]+/).filter(Boolean);
+  let got=0;
+  IND.forEach(d=>{
+    if(d.k==='bp'){ const m=txt.match(/血压[^0-9]{0,8}(\d{2,3})\s*[\/／]\s*(\d{2,3})/);
+      if(m){ store.checkup.vals.bp={sy:+m[1],di:+m[2],at:todayStr()}; got++; } return; }
+    if(d.k==='bmi'){ const m=txt.match(/BMI[^0-9]{0,6}(\d{2}(?:\.\d+)?)/i);
+      if(m){ store.checkup.vals.bmi={val:+m[1],at:todayStr()}; got++; } return; }
+    for(const ln of lines){
+      try{
+        const re=new RegExp(d.re,'i');
+        if(!re.test(ln))continue;
+        if(d.k==='hgb'&&/平均|分布|MCH|糖化/i.test(ln))continue;
+        if(d.k==='glu'&&/餐后|随机|2h|2小时/i.test(ln))continue;
+        if(d.k==='vitd'&&/D3/i.test(ln)&&!/25/.test(ln))continue;
+        const m=ln.match(new RegExp('(?:'+d.re+')[^0-9\\/\\-]{0,10}?([0-9]+(?:\\.[0-9]+)?)','i'));
+        if(m&&!isNaN(parseFloat(m[1]))){
+          store.checkup.vals[d.k]={val:parseFloat(m[1]),at:todayStr()}; got++; break; }
+      }catch(e){}
+    }
+  });
+  saveLocal(); renderCkGrid(); closePaste();
+  toast(got?('识别到 '+got+' 项 ✓ 请核对数值'):'没认出数值——试试"项目名+数值"每行一条');
+}
+function runCheckup(){
+  normalizeVitd();
+  const v=store.checkup.vals||{};
+  const entries=[];
+  IND.forEach(d=>{
+    if(d.k==='bp'){ if(v.bp)entries.push({d,v:v.bp,st:bpClass(v.bp.sy,v.bp.di)}); return; }
+    const e=v[d.k]; if(!e||e.val===''||e.val==null)return;
+    entries.push({d,v:e,st:statusOf(d,e.val,ckSex)});
+  });
+  if(!entries.length){ toast('先填至少一项数值'); return; }
+  const bad=entries.filter(e=>e.st.st!=='ok');
+  const TAG={ok:['ok','正常'],mid:['mid','临界'],hi:['hi','偏高'],lo:['lo','偏低']};
+  const p=store.profile||{type:'day',flags:{}};
+  const cross=[];
+  const has=k=>entries.some(e=>e.d.k===k&&e.st.st!=='ok');
+  if(p.type==='driver'){
+    if(has('bp'))cross.push('🚚 司机×血压：出车前测一次血压；>160/100 别出长途；含伪麻黄碱的感冒药会升压，服药看说明书');
+    if(has('glu')||has('hba1c'))cross.push('🚚 司机×血糖：服务区餐是重灾区——车上备无糖加餐（煮蛋/牛奶/坚果），别拿含糖饮料顶饿');
+    if(has('hgb')&&entries.some(e=>e.d.k==='hgb'&&e.st.st==='lo'))cross.push('🚚 司机×贫血：携氧下降=疲劳来得更早，贫血没纠正前主动压缩单次驾驶时长');
+    if(has('ua'))cross.push('🚚 司机×尿酸：久坐+喝水少是司机尿酸高的两大推手——按喝水目标执行，停车时顺带接水');
+  }
+  if(p.type==='night'&&(has('glu')||has('hba1c')||has('tg')))cross.push('🌙 夜班×代谢：凌晨泡面/含糖饮料是夜班代谢指标恶化的第一推手——主餐上班前吃，凌晨只吃蛋白');
+  if(p.flags&&p.flags.sedentary&&(has('lipidDir')||has('ua')||has('tc')||has('tg')||has('ldl')||has('hdl')))cross.push('🧎 久坐×血脂/尿酸：每坐 1 小时起身 3 分钟 + 每天 30 分钟快走，比换食谱见效更快');
+  if(p.flags&&p.flags.outdoor&&(has('bp')))cross.push('🏗️ 户外×血压：高温天加量补水，别憋尿、别硬扛日晒');
+  const plan={items:[],rems:[]};
+  entries.forEach(e=>{
+    if(e.st.st==='ok')return;
+    const d=e.d, it=d.item;
+    if(it&&plan.items.every(x=>x.gid!==it.gid))plan.items.push({gid:it.gid,ico:it.ico,name:it.name,note:it.note});
+    if(d.remOnly&&plan.rems.every(x=>x.name!==d.remOnly.name))plan.rems.push({name:d.remOnly.name,win:d.remOnly.win});
+    if(d.k==='bp'&&e.st.st!=='ok'&&plan.rems.every(x=>x.name!=='血压复测'))
+      plan.rems.push({name:'血压复测',win:e.st.st==='hi'?90:30});
+  });
+  /* 通用复查提醒：任何明显异常或临界的都建议 90 天内复查原指标 */
+  entries.forEach(e=>{
+    if(e.st.st==='ok')return;
+    const nm=e.d.k==='bp'?'血压复查':(e.d.name.split(' ')[0]+'复查');
+    if(plan.rems.every(x=>x.name!==nm))
+      plan.rems.push({name:nm,win:e.st.st==='hi'?90:180});
+  });
+  ckPlan=plan;
+  let H='';
+  H+='<h4>① 客观描述</h4><ul>';
+  entries.forEach(e=>{
+    const tg=TAG[e.st.st];
+    const rng=d=>{ if(d.k==='bp')return d.refTxt; const r=indRef(d,ckSex);return r[0]+'~'+r[1]; };
+    const val=e.d.k==='bp'?(e.v.sy+'/'+e.v.di):(e.v.val+(e.d.unit?' '+e.d.unit:''));
+    const delta=e.st.st!=='ok'&&e.st.delta?('（偏离 '+(e.st.delta>0?'+':'')+e.st.delta+'%）'):'';
+    H+=`<li>${e.d.name}：<b>${esc(String(val))}</b> <span class="tag ${tg[0]}">${tg[1]}</span> <span class="sub">参考 ${rng(e.d)}${delta}</span>`+
+       (e.st.sev?` <span class="tag hi">🔴 明显异常</span>`:'')+ (e.v.note?' <span class="sub">'+esc(e.v.note)+'</span>':'') +'</li>';
+  });
+  H+='</ul>';
+  const sev=entries.filter(e=>e.st.sev);
+  if(sev.length)H+=`<div class="anbox" style="border-color:var(--bad)">⚠️ <b>${esc(sev.map(e=>e.d.name).join('、'))} 达到明显异常水平</b>——本工具只做行为提示，请尽快到医院复查/就医，别靠打卡硬扛。</div>`;
+  H+='<h4>② 客观建议（行为层，非诊疗）</h4><ul>';
+  entries.forEach(e=>{
+    if(e.st.st==='ok')return;
+    const a=e.st.st==='hi'?e.d.advHi:e.st.st==='lo'?e.d.advLo:(e.d.advHi||'处于临界区：按上面的方向先调整生活方式，1~3 个月复查对比');
+    H+='<li><b>'+esc(e.d.name)+'</b>：'+esc(a)+'</li>';
+  });
+  if(!bad.length)H+='<li>录入的指标全部在参考区间内 ✅ 继续保持现有作息。</li>';
+  H+='</ul>';
+  if(cross.length)H+='<h4>🔗 结合你的作息（'+esc(profileDesc(p))+'）</h4><ul>'+cross.map(c=>'<li>'+esc(c)+'</li>').join('')+'</ul>';
+  H+='<h4>③ 可转成的打卡项与复查提醒</h4>';
+  H+=plan.items.length||plan.rems.length
+    ?('<ul>'+plan.items.map(it=>`<li>${it.ico} ${esc(it.name)} <span class="sub">每天打卡</span></li>`).join('')
+      +plan.rems.map(r=>`<li>⏰ ${esc(r.name)} <span class="sub">${r.win} 天内复查</span></li>`).join('')+'</ul>')
+    :'<div class="sub">本次没有需要转化的项。</div>';
+  document.getElementById('ckResult').innerHTML=H;
+  document.getElementById('ckMeta').textContent='· '+todayStr()+' · 性别：'+(ckSex==='m'?'男':'女');
+  document.getElementById('ckResultCard').classList.remove('hidden');
+  document.getElementById('ckResultCard').scrollIntoView({behavior:'smooth'});
+  buildCkMd(entries,bad,cross,plan);
+}
+function buildCkMd(entries,bad,cross,plan){
+  const L=[];
+  L.push('# 🧪 体检 × 作息 联合分析（'+todayStr()+'）');
+  L.push('');
+  L.push('**作息档案**：'+profileDesc(store.profile||{type:'day',flags:{},water:6}));
+  L.push('**录入**：'+entries.map(e=>e.d.name+' '+(e.d.k==='bp'?e.v.sy+'/'+e.v.di:e.v.val)).join(' · '));
+  L.push('');
+  L.push('## ① 客观描述');
+  entries.forEach(e=>{
+    const val=e.d.k==='bp'?(e.v.sy+'/'+e.v.di):(e.v.val+(e.d.unit?' '+e.d.unit:''));
+    L.push('- '+e.d.name+'：'+val+'【'+(e.st.st==='ok'?'正常':e.st.st==='mid'?'临界':e.st.st==='hi'?'偏高':'偏低')+'】');
+  });
+  if(bad.length){
+    L.push(''); L.push('## ② 客观建议（行为层，非诊疗）');
+    bad.forEach(e=>{ const a=e.st.st==='hi'?e.d.advHi:e.st.st==='lo'?e.d.advLo:e.d.advHi;
+      L.push('- **'+e.d.name+'**：'+a); });
+    if(cross.length){ L.push(''); L.push('### 结合作息'); cross.forEach(c=>L.push('- '+c)); }
+    L.push(''); L.push('## ③ 转化');
+    (plan.items||[]).forEach(it=>L.push('- 打卡项：'+it.ico+' '+it.name));
+    (plan.rems||[]).forEach(r=>L.push('- 提醒：'+r.name+'（'+r.win+'天内）'));
+  }
+  L.push(''); L.push('*本分析为行为层提示，不构成诊疗意见，以医院医生意见为准。*');
+  ckPlan.md=L.join('\n');
+}
+function copyCheckup(){ copyText(ckPlan&&ckPlan.md,'分析已复制 ✓ 可粘给 Claude 深度讨论'); }
+function applyCheckupItems(){
+  if(!ckPlan||(!ckPlan.items&&!ckPlan.rems)){ toast('先生成联合分析'); return; }
+  ckPlan.items.forEach(it=>{
+    const i=store.customItems.findIndex(x=>x.gid===it.gid);
+    const rec={id:'cus'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+      ico:it.ico,name:it.name,note:it.note,gid:it.gid};
+    if(i>=0)store.customItems[i]=Object.assign(store.customItems[i],rec);
+    else store.customItems.push(rec);
+  });
+  const t=todayStr();
+  ckPlan.rems.forEach(r=>{
+    const i=store.reminders.findIndex(x=>x.name===r.name);
+    const rec={name:r.name,due:addDays(t,Math.min(r.win,90)),note:'体检分析自动生成',win:14};
+    if(i>=0)store.reminders[i]=rec; else store.reminders.push(rec);
+  });
+  save(); renderCustom(); render();
+  toast('已加入清单和提醒 ✓ 到期自动复查');
+}
+function clearCheckup(){
+  if(!confirm('清空所有已录入的体检数值？'))return;
+  store.checkup={vals:{},text:''}; ckPlan=null; saveLocal(); renderCkGrid();
+  document.getElementById('ckResultCard').classList.add('hidden');
+  toast('已清空');
+}
+/* ============ 对话式入职引导 ============ */
+let obProfile=null;
+function bub(cls,html){ const d=document.createElement('div'); d.className='bub '+cls;
+  d.innerHTML=html; document.getElementById('chatBox').appendChild(d);
+  d.scrollIntoView({behavior:'smooth',block:'end'}); return d; }
+function startOnboard(){
+  obProfile=null;
+  document.getElementById('chatBox').innerHTML='';
+  document.getElementById('chatRow').classList.add('hidden');
+  bub('ai','你好！我是<b>每日打卡</b> 📅<br>'+
+    '不用选表单——直接用一两句话描述你的<b>工作和作息</b>，我来给你生成专属打卡清单。');
+  bub('ai','比如：<div class="chips" style="margin-top:8px">'+
+    ['我在工厂两班倒，白班夜班轮着来','我是货车司机，常凌晨出车','办公室上班族，朝九晚五久坐',
+     '长期纯夜班，白天睡觉','三班倒 早中夜轮换','我退休了，在家带孙',
+     '自由职业，在家办公','高中生，住校'].map(x=>
+      '<button onclick="document.getElementById(\'chatInput\').value=this.textContent;document.getElementById(\'chatInput\').focus()">'+x+'</button>').join('')+
+    '</div><div class="sub" style="margin-top:6px">点上面任一句填入，或自己描述（可加上 户外/工地/久坐、上午休 等）。</div>');
+  document.getElementById('chatRow').classList.remove('hidden');
+  setTimeout(()=>document.getElementById('chatInput').focus(),200);
+}
+function chatSend(){
+  const inp=document.getElementById('chatInput');
+  const txt=inp.value.trim();
+  if(!txt){ toast('先描述一下你的作息'); return; }
+  bub('me',esc(txt));
+  inp.value='';
+  obProfile=parseProfile(txt);
+  if(store.profile&&store.profile.sex)obProfile.sex=store.profile.sex;
+  const wt=(WT_META[obProfile.type]||{}).name;
+  let msg='明白了——<b>'+esc(wt||'日常作息')+'</b>：'+esc(profileDesc(obProfile))+'<br>';
+  msg+='<span class="sub" style="color:inherit;opacity:.75">已按这个工种的习惯生成打卡项：'+itemsFor('',todayStr()).map(it=>esc(it.name)).join('、')+'</span>';
+  if(obProfile.seq){
+    msg+='<br><br>这种班是轮着来的——<b>今天（'+todayStr().slice(5)+'）你实际在哪个班？</b>';
+    bub('ai',msg);
+    bub('ai','<div class="chips">'+obProfile.seq.map(k=>
+      '<button onclick="obPickShift(\''+k+'\')">'+(SHIFT_ICO[k]||'')+' '+ (SHIFT_LABEL[k]||k)+'</button>').join('')+'</div>');
+  } else {
+    msg+='<br><br>没问题就点下面确认（不对就再改改描述重新发）。';
+    bub('ai',msg);
+    bub('ai','<div class="chips">'+
+      '<button style="background:var(--good);border-color:var(--good);color:#fff" onclick="obFinish()">✓ 就这样，开始打卡</button>'+
+      '<button onclick="startOnboard()">↩ 重新描述</button></div>');
+  }
+}
+function obPickShift(k){
+  bub('me',(SHIFT_ICO[k]||'')+' 今天是'+(SHIFT_LABEL[k]||k));
+  const t=todayStr();
+  obProfile.anchor=addDays(t,-obProfile.seq.indexOf(k));
+  bub('ai','好，循环锚点定在 '+obProfile.anchor+'。'
+    +'<br><span class="sub" style="color:inherit;opacity:.75">以后班次自动识别，不对可在「打卡页」点班次修正，或在「我的」里重新对齐。</span>');
+  bub('ai','<div class="chips">'+
+    '<button style="background:var(--good);border-color:var(--good);color:#fff" onclick="obFinish()">✓ 就这样，开始打卡</button>'+
+    '<button onclick="startOnboard()">↩ 重新描述</button></div>');
+}
+function obFinish(){
+  if(!obProfile)return;
+  store.profile=obProfile; store.onboarded=true; save();
+  bub('ai','入职完成 ✅ 三件事帮你记着：<br>① 每天<b>打卡</b>（点一下就行）<br>② <b>体检</b>页录入指标，生成「体检×作息」联合分析<br>③ 每周一自动出<b>上周周报</b>');
+  setTimeout(()=>{ renderAll(); toast('开始打卡吧 🔥'); },600);
+}
+function restartOnboard(){
+  if(!confirm('重新入职会重新生成打卡清单（历史记录和自定义项都保留），确定？'))return;
+  store.onboarded=false; saveLocal();
+  document.getElementById('appView').classList.add('hidden');
+  document.getElementById('onboardView').classList.remove('hidden');
+  startOnboard();
+}
+/* ============ 主题 ============ */
+function applyTheme(){
+  const root=document.documentElement;
+  root.removeAttribute('data-theme');
+  if(theme!=='auto')root.setAttribute('data-theme',theme);
+  document.getElementById('themeBtn').textContent=
+    theme==='auto'?'🌗 自动':theme==='dark'?'🌙 深色':'☀️ 浅色';
+}
+document.getElementById('themeBtn').onclick=()=>{
+  theme=theme==='auto'?'dark':theme==='dark'?'light':'auto';
+  localStorage.setItem(LS_THEME,theme); applyTheme();
+};
+document.getElementById('chatInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter')chatSend();
+});
+/* ============ 启动 ============ */
+applyTheme();
+if(store.onboarded&&store.profile){
+  renderAll(); pull(); initCloudCard(); setSync();
+  setTimeout(maybeWeeklyAuto,900);
+} else {
+  setSync(); startOnboard();
+}
+</script>
+</body>
+</html>
